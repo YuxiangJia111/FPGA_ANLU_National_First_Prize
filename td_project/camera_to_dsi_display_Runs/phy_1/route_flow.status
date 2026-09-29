@@ -1,0 +1,24 @@
+Location         : D:\Anlogic\osd_SC500_720P\td_project\camera_to_dsi_display_Runs\phy_1
+Running with     : Tang Dynasty v6.2.168116
+                   Copyright (c) 2012-2025 Anlogic Inc.
+Top Model        : design_top_wrapper
+Device           : PH1P35MDG324
+Speed            : 3
+
+Timing Mode      : final
+Setup            : WNS  -258ps  TNS     -516ps  NUM_FEPS     2
+Hold             : WNS    20ps  TNS        0ps  NUM_FEPS     0
+
+Flow Statistics  :
+---------------------------------------------------------------------------------------------------
+     command     |  #calls  |  wall time   |  cpu time(s)  |  used memory(mb)  |  peak memory(mb)  
+---------------------------------------------------------------------------------------------------
+      place      |    1     |  2m10s(57%)  |   345(68%)    |       1309        |       1309        
+      route      |    1     |  1m16s(33%)  |   133(26%)    |       1082        |       2040        
+    phys_opt     |    1     |   13s(5%)    |    18(3%)     |       2040        |       2040        
+    fix_hold     |    1     |    7s(3%)    |     7(1%)     |        859        |       2040        
+    import_db    |    1     |    1s(0%)    |     0(0%)     |        576        |        576        
+  import_device  |    1     |    1s(0%)    |     1(0%)     |        325        |        325        
+---------------------------------------------------------------------------------------------------
+      total      |    6     |    3m48s     |      504      |       2040        |       2040        
+---------------------------------------------------------------------------------------------------

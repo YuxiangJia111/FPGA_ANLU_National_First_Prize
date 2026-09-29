@@ -1,0 +1,32 @@
+============================================================
+   Tang Dynasty, V6.2.168116
+   Copyright (c) 2012-2025 Anlogic Inc.
+   Executable = D:/Anlogic/bin/td.exe
+   Built at =   16:32:07 Jun 12 2025
+   Run by =     º÷”ÓœË
+   Run Date =   Sun Sep 27 14:00:53 2026
+
+   Run on =     YUXIANGJIA
+============================================================
+HDL-5007 WARNING: /* is inside a comment in ../user_source/hdl_source/isp/demosaic_4x_2_0/demosaic.v(89)
+HDL-5007 WARNING: /* is inside a comment in ../user_source/hdl_source/isp/demosaic_4x_2_0/demosaic.v(100)
+HDL-5007 WARNING: /* is inside a comment in ../user_source/hdl_source/isp/demosaic_4x_2_0/demosaic.v(89)
+HDL-5007 WARNING: /* is inside a comment in ../user_source/hdl_source/isp/demosaic_4x_2_0/demosaic.v(100)
+HDL-5007 WARNING: /* is inside a comment in ../user_source/hdl_source/isp/demosaic_4x_2_0/demosaic.v(89)
+HDL-5007 WARNING: /* is inside a comment in ../user_source/hdl_source/isp/demosaic_4x_2_0/demosaic.v(100)
+HDL-5007 WARNING: /* is inside a comment in ../user_source/hdl_source/isp/demosaic_4x_2_0/demosaic.v(89)
+HDL-5007 WARNING: /* is inside a comment in ../user_source/hdl_source/isp/demosaic_4x_2_0/demosaic.v(100)
+PRJ-5303 WARNING: Run syn_1 failed.
+PRJ-5303 WARNING: Run syn_1 failed.
+HDL-5007 WARNING: /* is inside a comment in ../user_source/hdl_source/isp/demosaic_4x_2_0/demosaic.v(89)
+HDL-5007 WARNING: /* is inside a comment in ../user_source/hdl_source/isp/demosaic_4x_2_0/demosaic.v(100)
+HDL-5007 WARNING: /* is inside a comment in ../user_source/hdl_source/isp/demosaic_4x_2_0/demosaic.v(89)
+HDL-5007 WARNING: /* is inside a comment in ../user_source/hdl_source/isp/demosaic_4x_2_0/demosaic.v(100)
+HDL-5007 WARNING: /* is inside a comment in ../user_source/hdl_source/isp/demosaic_4x_2_0/demosaic.v(89)
+HDL-5007 WARNING: /* is inside a comment in ../user_source/hdl_source/isp/demosaic_4x_2_0/demosaic.v(100)
+PRJ-8403 ERROR: File(D:/Anlogic/osd_SC500_720P/user_source/hdl_source/design_top_wrapper.v) is already in fileSet(design_1).
+GUI-5001 WARNING: Failed to add the file: D:/Anlogic/osd_SC500_720P/user_source/hdl_source/design_top_wrapper.v
+HDL-5007 WARNING: /* is inside a comment in ../user_source/hdl_source/isp/demosaic_4x_2_0/demosaic.v(89)
+HDL-5007 WARNING: /* is inside a comment in ../user_source/hdl_source/isp/demosaic_4x_2_0/demosaic.v(100)
+HDL-5007 WARNING: /* is inside a comment in ../user_source/hdl_source/isp/demosaic_4x_2_0/demosaic.v(89)
+HDL-5007 WARNING: /* is inside a comment in ../user_source/hdl_source/isp/demosaic_4x_2_0/demosaic.v(100)
