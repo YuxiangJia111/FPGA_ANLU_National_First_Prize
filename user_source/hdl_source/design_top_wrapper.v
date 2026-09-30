@@ -74,9 +74,9 @@ wire processed_video_user;
 wire processed_video_last;
 wire [3:0] ddr_debug_status;
 wire ddr_init_calib_complete;
-wire [1:0] image_mode;
-reg [1:0] image_mode_sync_1;
-reg [1:0] image_mode_sync_2;
+wire [2:0] image_mode;
+reg [2:0] image_mode_sync_1;
+reg [2:0] image_mode_sync_2;
 wire [3:0] control_key_event;
 wire [3:0] control_switch_state;
 
@@ -95,8 +95,8 @@ control_top u_control_top (
 
 always @(posedge hdmi_pixel_clk or negedge system_rst_n) begin
     if(!system_rst_n) begin
-        image_mode_sync_1 <= 2'b01;
-        image_mode_sync_2 <= 2'b01;
+        image_mode_sync_1 <= 3'b001;
+        image_mode_sync_2 <= 3'b001;
     end else begin
         image_mode_sync_1 <= image_mode;
         image_mode_sync_2 <= image_mode_sync_1;

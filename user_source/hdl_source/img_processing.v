@@ -6,7 +6,7 @@ module img_processing #(
 ) (
     input  wire        I_clk,
     input  wire        I_rst_n,
-    input  wire [1:0]  I_mode,
+    input  wire [2:0]  I_mode,
     input  wire [23:0] I_rgb,
     input  wire        I_vsync,
     input  wire        I_hsync,
@@ -24,7 +24,7 @@ module img_processing #(
 
     wire [23:0] ycbcr_data;
     wire [23:0] rgb_from_csc;
-    wire [1:0]  mode_from_csc;
+    wire [2:0]  mode_from_csc;
     wire         vsync_from_csc;
     wire         hsync_from_csc;
     wire         de_from_csc;
@@ -34,12 +34,14 @@ module img_processing #(
     wire [7:0]  sobel_data;
     wire [23:0] rgb_aligned;
     wire [23:0] ycbcr_aligned;
-    wire [1:0]  mode_aligned;
+    wire [2:0]  mode_aligned;
     wire         vsync_aligned;
     wire         hsync_aligned;
     wire         de_aligned;
     wire         user_aligned;
     wire         last_aligned;
+    wire [23:0]  ae_ycbcr;
+    wire [23:0]  ae_rgb;
 
     rgb2ycbcr u_rgb2ycbcr (
         .I_clk       (I_clk),
@@ -86,12 +88,39 @@ module img_processing #(
         .O_last      (last_aligned)
     );
 
+    auto_exposure #(
+        .IMG_WIDTH  (IMG_WIDTH),
+        .IMG_HEIGHT (IMG_HEIGHT)
+    ) u_auto_exposure (
+        .I_clk       (I_clk),
+        .I_rst_n     (I_rst_n),
+        .I_ycbcr     (ycbcr_aligned),
+        .I_vsync     (vsync_aligned),
+        .I_hsync     (hsync_aligned),
+        .I_de        (de_aligned),
+        .I_user      (user_aligned),
+        .I_last      (last_aligned),
+        .O_ycbcr     (ae_ycbcr),
+        .O_vsync     (),
+        .O_hsync     (),
+        .O_de        (),
+        .O_user      (),
+        .O_last      (),
+        .O_lut_select()
+    );
+
+    ycbcr2rgb u_ycbcr2rgb (
+        .I_ycbcr (ae_ycbcr),
+        .O_rgb   (ae_rgb)
+    );
+
     always @(*) begin
         case(mode_aligned)
-            2'b01: O_rgb = {3{ycbcr_aligned[23:16]}};
-            2'b10: O_rgb = (ycbcr_aligned[23:16] >= 8'd128) ?
+            3'b001: O_rgb = {3{ycbcr_aligned[23:16]}};
+            3'b010: O_rgb = (ycbcr_aligned[23:16] >= 8'd128) ?
                             24'hffffff : 24'h000000;
-            2'b11: O_rgb = {3{sobel_data}};
+            3'b011: O_rgb = {3{sobel_data}};
+            3'b100: O_rgb = ae_rgb;
             default: O_rgb = rgb_aligned;
         endcase
     end

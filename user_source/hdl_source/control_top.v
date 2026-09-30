@@ -7,18 +7,19 @@ module control_top (
     input  wire [3:0] I_switch,
     output wire [3:0] O_key_event,
     output wire [3:0] O_switch_state,
-    output wire [1:0] O_image_mode
+    output wire [2:0] O_image_mode
 );
 
-    localparam [1:0] MODE_ORIGINAL = 2'b00;
-    localparam [1:0] MODE_GRAY     = 2'b01;
-    localparam [1:0] MODE_BINARY   = 2'b10;
-    localparam [1:0] MODE_SOBEL    = 2'b11;
+    localparam [2:0] MODE_ORIGINAL = 3'b000;
+    localparam [2:0] MODE_GRAY     = 3'b001;
+    localparam [2:0] MODE_BINARY   = 3'b010;
+    localparam [2:0] MODE_SOBEL    = 3'b011;
+    localparam [2:0] MODE_AUTO_EXP = 3'b100;
 
     wire [3:0] key_event;
     reg  [3:0] switch_sync_1;
     reg  [3:0] switch_sync_2;
-    reg  [1:0] selected_mode;
+    reg  [2:0] selected_mode;
 
     key_remove_shakes u_key1_debounce (
         .I_clk          (I_clk),
@@ -66,14 +67,16 @@ module control_top (
             case(selected_mode)
                 MODE_GRAY:   selected_mode <= MODE_BINARY;
                 MODE_BINARY: selected_mode <= MODE_SOBEL;
-                MODE_SOBEL:  selected_mode <= MODE_GRAY;
+                MODE_SOBEL:  selected_mode <= MODE_AUTO_EXP;
+                MODE_AUTO_EXP: selected_mode <= MODE_GRAY;
                 default:     selected_mode <= MODE_GRAY;
             endcase
         end else if(key_event[2]) begin
             case(selected_mode)
-                MODE_GRAY:   selected_mode <= MODE_SOBEL;
+                MODE_GRAY:   selected_mode <= MODE_AUTO_EXP;
                 MODE_SOBEL:  selected_mode <= MODE_BINARY;
                 MODE_BINARY: selected_mode <= MODE_GRAY;
+                MODE_AUTO_EXP: selected_mode <= MODE_SOBEL;
                 default:     selected_mode <= MODE_SOBEL;
             endcase
         end
