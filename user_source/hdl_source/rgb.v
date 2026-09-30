@@ -4,7 +4,7 @@ module rgb2ycbcr (
     input  wire        I_clk,
     input  wire        I_rst_n,
     input  wire [23:0] I_rgb,
-    input  wire [1:0]  I_mode,
+    input  wire [2:0]  I_mode,
     input  wire        I_vsync,
     input  wire        I_hsync,
     input  wire        I_de,
@@ -12,7 +12,7 @@ module rgb2ycbcr (
     input  wire        I_last,
     output reg  [23:0] O_rgb,
     output reg  [23:0] O_ycbcr,
-    output reg  [1:0]  O_mode,
+    output reg  [2:0]  O_mode,
     output reg         O_vsync,
     output reg         O_hsync,
     output reg         O_de,
@@ -30,14 +30,14 @@ module rgb2ycbcr (
     reg signed [17:0] cr_g_mul_1;
     reg signed [16:0] cr_b_mul_1;
     reg [23:0] rgb_1;
-    reg [1:0] mode_1;
+    reg [2:0] mode_1;
     reg vsync_1, hsync_1, de_1, user_1, last_1;
 
     reg [16:0] y_sum_2;
     reg signed [18:0] cb_sum_2;
     reg signed [18:0] cr_sum_2;
     reg [23:0] rgb_2;
-    reg [1:0] mode_2;
+    reg [2:0] mode_2;
     reg vsync_2, hsync_2, de_2, user_2, last_2;
 
     always @(posedge I_clk or negedge I_rst_n) begin
@@ -52,7 +52,7 @@ module rgb2ycbcr (
             cr_g_mul_1 <= 18'sd0;
             cr_b_mul_1 <= 17'sd0;
             rgb_1      <= 24'd0;
-            mode_1     <= 2'd0;
+            mode_1     <= 3'd0;
             vsync_1    <= 1'b0;
             hsync_1    <= 1'b0;
             de_1       <= 1'b0;
@@ -84,7 +84,7 @@ module rgb2ycbcr (
             cb_sum_2 <= 19'sd0;
             cr_sum_2 <= 19'sd0;
             rgb_2    <= 24'd0;
-            mode_2   <= 2'd0;
+            mode_2   <= 3'd0;
             vsync_2  <= 1'b0;
             hsync_2  <= 1'b0;
             de_2     <= 1'b0;
@@ -108,7 +108,7 @@ module rgb2ycbcr (
         if(!I_rst_n) begin
             O_rgb    <= 24'd0;
             O_ycbcr  <= 24'd0;
-            O_mode   <= 2'd0;
+            O_mode   <= 3'd0;
             O_vsync  <= 1'b0;
             O_hsync  <= 1'b0;
             O_de     <= 1'b0;

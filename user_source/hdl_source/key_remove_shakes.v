@@ -9,7 +9,9 @@ description:
 */
 
 
-module key_remove_shakes( 
+module key_remove_shakes #(
+	parameter integer DELAY_CYCLES = 100000
+)(
 	input wire      I_clk,    
 	input wire      I_rst_n,
 	
@@ -28,7 +30,7 @@ module key_remove_shakes(
 	reg       S_delay_en;            
 	reg       S_delay_en_1d;         
 	wire      S_delay_en_n_edge;     
-	reg[16:0] S_delay_cnt;           
+	reg[18:0] S_delay_cnt;
 	
 	
 	always @ (posedge I_clk or negedge I_rst_n) begin
@@ -55,7 +57,7 @@ module key_remove_shakes(
 		else
 			if(S_key_in_n_edge)
 				S_delay_en <= 1'b1;
-			else if(S_delay_cnt == 'd100000)
+			else if(S_delay_cnt == DELAY_CYCLES)
 				S_delay_en <= 1'b0;
 			else
 				S_delay_en <= S_delay_en;

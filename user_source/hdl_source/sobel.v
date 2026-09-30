@@ -8,7 +8,7 @@ module sobel_edge #(
     input  wire        I_rst_n,
     input  wire [23:0] I_rgb,
     input  wire [23:0] I_ycbcr,
-    input  wire [1:0]  I_mode,
+    input  wire [2:0]  I_mode,
     input  wire        I_vsync,
     input  wire        I_hsync,
     input  wire        I_de,
@@ -17,7 +17,7 @@ module sobel_edge #(
     output reg  [7:0]  O_sobel,
     output reg  [23:0] O_rgb,
     output reg  [23:0] O_ycbcr,
-    output reg  [1:0]  O_mode,
+    output reg  [2:0]  O_mode,
     output reg         O_vsync,
     output reg         O_hsync,
     output reg         O_de,
@@ -40,7 +40,7 @@ module sobel_edge #(
     reg [9:0] y_q;
     reg [23:0] rgb_q;
     reg [23:0] ycbcr_q;
-    reg [1:0] mode_q;
+    reg [2:0] mode_q;
     reg vsync_q, hsync_q, de_q, user_q, last_q;
 
     reg [7:0] top_a, top_b;
@@ -50,7 +50,7 @@ module sobel_edge #(
     reg [10:0] gy_pos_s1, gy_neg_s1;
     reg border_s1;
     reg [23:0] rgb_s1, ycbcr_s1;
-    reg [1:0] mode_s1;
+    reg [2:0] mode_s1;
     reg vsync_s1, hsync_s1, de_s1, user_s1, last_s1;
 
     wire signed [11:0] gx_diff = $signed({1'b0, gx_pos_s1}) -
@@ -60,13 +60,13 @@ module sobel_edge #(
     reg [10:0] gx_abs_s2, gy_abs_s2;
     reg border_s2;
     reg [23:0] rgb_s2, ycbcr_s2;
-    reg [1:0] mode_s2;
+    reg [2:0] mode_s2;
     reg vsync_s2, hsync_s2, de_s2, user_s2, last_s2;
 
     reg [11:0] magnitude_s3;
     reg border_s3;
     reg [23:0] rgb_s3, ycbcr_s3;
-    reg [1:0] mode_s3;
+    reg [2:0] mode_s3;
     reg vsync_s3, hsync_s3, de_s3, user_s3, last_s3;
 
     always @(posedge I_clk or negedge I_rst_n) begin
@@ -109,7 +109,7 @@ module sobel_edge #(
         if(!I_rst_n) begin
             rgb_q <= 24'd0;
             ycbcr_q <= 24'd0;
-            mode_q <= 2'd0;
+            mode_q <= 3'd0;
             vsync_q <= 1'b0;
             hsync_q <= 1'b0;
             de_q <= 1'b0;
@@ -142,7 +142,7 @@ module sobel_edge #(
             border_s1 <= 1'b1;
             rgb_s1 <= 24'd0;
             ycbcr_s1 <= 24'd0;
-            mode_s1 <= 2'd0;
+            mode_s1 <= 3'd0;
             vsync_s1 <= 1'b0;
             hsync_s1 <= 1'b0;
             de_s1 <= 1'b0;
@@ -197,7 +197,7 @@ module sobel_edge #(
             border_s2 <= 1'b1;
             rgb_s2 <= 24'd0;
             ycbcr_s2 <= 24'd0;
-            mode_s2 <= 2'd0;
+            mode_s2 <= 3'd0;
             vsync_s2 <= 1'b0;
             hsync_s2 <= 1'b0;
             de_s2 <= 1'b0;
@@ -224,7 +224,7 @@ module sobel_edge #(
             border_s3 <= 1'b1;
             rgb_s3 <= 24'd0;
             ycbcr_s3 <= 24'd0;
-            mode_s3 <= 2'd0;
+            mode_s3 <= 3'd0;
             vsync_s3 <= 1'b0;
             hsync_s3 <= 1'b0;
             de_s3 <= 1'b0;
@@ -249,7 +249,7 @@ module sobel_edge #(
             O_sobel <= 8'd0;
             O_rgb <= 24'd0;
             O_ycbcr <= 24'd0;
-            O_mode <= 2'd0;
+            O_mode <= 3'd0;
             O_vsync <= 1'b0;
             O_hsync <= 1'b0;
             O_de <= 1'b0;
