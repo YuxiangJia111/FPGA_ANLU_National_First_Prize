@@ -15,6 +15,7 @@ module control_top (
     localparam [2:0] MODE_BINARY   = 3'b010;
     localparam [2:0] MODE_SOBEL    = 3'b011;
     localparam [2:0] MODE_AUTO_EXP = 3'b100;
+    localparam [2:0] MODE_EQUALIZE = 3'b101;
 
     wire [3:0] key_event;
     reg  [3:0] switch_sync_1;
@@ -68,12 +69,14 @@ module control_top (
                 MODE_GRAY:   selected_mode <= MODE_BINARY;
                 MODE_BINARY: selected_mode <= MODE_SOBEL;
                 MODE_SOBEL:  selected_mode <= MODE_AUTO_EXP;
-                MODE_AUTO_EXP: selected_mode <= MODE_GRAY;
+                MODE_AUTO_EXP: selected_mode <= MODE_EQUALIZE;
+                MODE_EQUALIZE: selected_mode <= MODE_GRAY;
                 default:     selected_mode <= MODE_GRAY;
             endcase
         end else if(key_event[2]) begin
             case(selected_mode)
-                MODE_GRAY:   selected_mode <= MODE_AUTO_EXP;
+                MODE_GRAY:   selected_mode <= MODE_EQUALIZE;
+                MODE_EQUALIZE: selected_mode <= MODE_AUTO_EXP;
                 MODE_SOBEL:  selected_mode <= MODE_BINARY;
                 MODE_BINARY: selected_mode <= MODE_GRAY;
                 MODE_AUTO_EXP: selected_mode <= MODE_SOBEL;

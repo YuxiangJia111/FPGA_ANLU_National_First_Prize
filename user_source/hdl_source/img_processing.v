@@ -40,8 +40,19 @@ module img_processing #(
     wire         de_aligned;
     wire         user_aligned;
     wire         last_aligned;
+    wire [7:0]   equalized_y;
+    wire [23:0]  hist_rgb;
+    wire [23:0]  hist_ycbcr;
+    wire [7:0]   hist_sobel;
+    wire [2:0]   hist_mode;
+    wire          hist_vsync;
+    wire          hist_hsync;
+    wire          hist_de;
+    wire          hist_user;
+    wire          hist_last;
     wire [23:0]  ae_ycbcr;
     wire [23:0]  ae_rgb;
+    wire [23:0]  equalized_rgb;
 
     rgb2ycbcr u_rgb2ycbcr (
         .I_clk       (I_clk),
@@ -88,18 +99,45 @@ module img_processing #(
         .O_last      (last_aligned)
     );
 
+    histogram_equalization #(
+        .IMG_WIDTH  (IMG_WIDTH),
+        .IMG_HEIGHT (IMG_HEIGHT)
+    ) u_histogram_equalization (
+        .I_clk         (I_clk),
+        .I_rst_n       (I_rst_n),
+        .I_rgb         (rgb_aligned),
+        .I_ycbcr       (ycbcr_aligned),
+        .I_sobel       (sobel_data),
+        .I_mode        (mode_aligned),
+        .I_vsync       (vsync_aligned),
+        .I_hsync       (hsync_aligned),
+        .I_de          (de_aligned),
+        .I_user        (user_aligned),
+        .I_last        (last_aligned),
+        .O_equalized_y (equalized_y),
+        .O_rgb         (hist_rgb),
+        .O_ycbcr       (hist_ycbcr),
+        .O_sobel       (hist_sobel),
+        .O_mode        (hist_mode),
+        .O_vsync       (hist_vsync),
+        .O_hsync       (hist_hsync),
+        .O_de          (hist_de),
+        .O_user        (hist_user),
+        .O_last        (hist_last)
+    );
+
     auto_exposure #(
         .IMG_WIDTH  (IMG_WIDTH),
         .IMG_HEIGHT (IMG_HEIGHT)
     ) u_auto_exposure (
         .I_clk       (I_clk),
         .I_rst_n     (I_rst_n),
-        .I_ycbcr     (ycbcr_aligned),
-        .I_vsync     (vsync_aligned),
-        .I_hsync     (hsync_aligned),
-        .I_de        (de_aligned),
-        .I_user      (user_aligned),
-        .I_last      (last_aligned),
+        .I_ycbcr     (hist_ycbcr),
+        .I_vsync     (hist_vsync),
+        .I_hsync     (hist_hsync),
+        .I_de        (hist_de),
+        .I_user      (hist_user),
+        .I_last      (hist_last),
         .O_ycbcr     (ae_ycbcr),
         .O_vsync     (),
         .O_hsync     (),
@@ -114,22 +152,28 @@ module img_processing #(
         .O_rgb   (ae_rgb)
     );
 
+    ycbcr2rgb u_ycbcr2rgb_equalized (
+        .I_ycbcr ({equalized_y, hist_ycbcr[15:0]}),
+        .O_rgb   (equalized_rgb)
+    );
+
     always @(*) begin
-        case(mode_aligned)
-            3'b001: O_rgb = {3{ycbcr_aligned[23:16]}};
-            3'b010: O_rgb = (ycbcr_aligned[23:16] >= 8'd128) ?
+        case(hist_mode)
+            3'b001: O_rgb = {3{hist_ycbcr[23:16]}};
+            3'b010: O_rgb = (hist_ycbcr[23:16] >= 8'd128) ?
                             24'hffffff : 24'h000000;
-            3'b011: O_rgb = {3{sobel_data}};
+            3'b011: O_rgb = {3{hist_sobel}};
             3'b100: O_rgb = ae_rgb;
-            default: O_rgb = rgb_aligned;
+            3'b101: O_rgb = equalized_rgb;
+            default: O_rgb = hist_rgb;
         endcase
     end
 
-    assign O_ycbcr = ycbcr_aligned;
-    assign O_vsync = vsync_aligned;
-    assign O_hsync = hsync_aligned;
-    assign O_de    = de_aligned;
-    assign O_user  = user_aligned;
-    assign O_last  = last_aligned;
+    assign O_ycbcr = hist_ycbcr;
+    assign O_vsync = hist_vsync;
+    assign O_hsync = hist_hsync;
+    assign O_de    = hist_de;
+    assign O_user  = hist_user;
+    assign O_last  = hist_last;
 
 endmodule

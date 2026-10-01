@@ -61,6 +61,7 @@ img_processing
 ├─ sobel_edge
 ├─ auto_exposure
 │  └─ y_lut
+├─ histogram_equalization
 └─ ycbcr2rgb
 ```
 
@@ -131,6 +132,21 @@ RGB888 输出
 - 正常：保持 `Y_out = Y_in`
 - 压暗：压低中间调和高光，同时保留暗部细节
 
+### 直方图均衡化
+
+直方图均衡化作为另一个独立显示模式，使用上一帧的完整 256 级 Y 直方图生成下一帧使用的映射 LUT：
+
+```text
+Y 分量 → 256 桶直方图 → CDF → 256×8 bit LUT → 均衡化 Y
+```
+
+- 文件：`user_source/hdl_source/histogram_equalization.v`
+- 使用两块双端口 RAM 分别保存直方图和映射 LUT
+- 在帧间消隐期计算非零最小 CDF 和完整映射曲线
+- 使用串行移位除法器生成 LUT，避免实例化大规模组合除法器
+- 保留原始 Cb/Cr，只替换 Y，最后复用 `ycbcr2rgb` 恢复彩色图像
+- 常量亮度帧退化为直通映射，避免除数为零
+
 ## 模式控制
 
 模式控制模块为：
@@ -159,17 +175,18 @@ user_source/hdl_source/control_top.v
 | `3'b010` | 二值化 |
 | `3'b011` | Sobel |
 | `3'b100` | 数字自动曝光 |
+| `3'b101` | 直方图均衡化 |
 
 KEY4 向前切换：
 
 ```text
-灰度 → 二值化 → Sobel → 自动曝光 → 灰度
+灰度 → 二值化 → Sobel → 自动曝光 → 直方图均衡化 → 灰度
 ```
 
 KEY3 向后切换：
 
 ```text
-灰度 → 自动曝光 → Sobel → 二值化 → 灰度
+灰度 → 直方图均衡化 → 自动曝光 → Sobel → 二值化 → 灰度
 ```
 
 ### 乒乓开关控制
