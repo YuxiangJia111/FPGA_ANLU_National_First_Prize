@@ -74,6 +74,8 @@ wire processed_video_user;
 wire processed_video_last;
 wire [3:0] ddr_debug_status;
 wire ddr_init_calib_complete;
+wire [3:0] cnn_result;
+wire cnn_result_valid;
 wire [2:0] image_mode;
 wire [3:0] control_key_event;
 wire [3:0] control_switch_state;
@@ -189,6 +191,15 @@ img_processing #(
     .O_last   (processed_video_last)
 );
 
+cnn_inference_top u_cnn_inference_top (
+    .I_pixel_clk    (hdmi_pixel_clk),
+    .I_rst_n        (system_rst_n),
+    .I_rgb          (display_video_data),
+    .I_de           (process_video_de),
+    .O_result       (cnn_result),
+    .O_result_valid (cnn_result_valid)
+);
+
 display_top u_display_top (
     .I_pixel_clk    (hdmi_pixel_clk),
     .I_serial_clk   (hdmi_serial_clk),
@@ -199,7 +210,7 @@ display_top u_display_top (
     .I_video_de     (processed_video_de),
     .I_video_user   (processed_video_user),
     .I_video_last   (processed_video_last),
-    .I_debug_status (ddr_debug_status),
+    .I_debug_status (cnn_result_valid ? cnn_result : 4'd0),
     .O_video_vsync  (display_video_vsync),
     .O_video_rd_en  (display_video_rd_en),
     .O_process_vsync(process_video_vsync),
