@@ -379,7 +379,7 @@
                     <Attr Name="CompileOrder" Val="61"/>
                 </FileInfo>
             </File>
-            <File Path="../user_source/hdl_source/cnn/cnn_inference_top.v">
+            <File Path="../user_source/hdl_source/auto_exposure.v">
                 <FileInfo>
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
@@ -387,7 +387,7 @@
                     <Attr Name="CompileOrder" Val="62"/>
                 </FileInfo>
             </File>
-            <File Path="../user_source/hdl_source/cnn/TOP.v">
+            <File Path="../user_source/hdl_source/y_lut.v">
                 <FileInfo>
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
@@ -395,7 +395,7 @@
                     <Attr Name="CompileOrder" Val="63"/>
                 </FileInfo>
             </File>
-            <File Path="../user_source/hdl_source/cnn/addressRAM.v">
+            <File Path="../user_source/hdl_source/ycbcr2rgb.v">
                 <FileInfo>
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
@@ -403,7 +403,7 @@
                     <Attr Name="CompileOrder" Val="64"/>
                 </FileInfo>
             </File>
-            <File Path="../user_source/hdl_source/cnn/border.v">
+            <File Path="../user_source/hdl_source/cnn/cnn_inference_top.v">
                 <FileInfo>
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
@@ -411,7 +411,7 @@
                     <Attr Name="CompileOrder" Val="65"/>
                 </FileInfo>
             </File>
-            <File Path="../user_source/hdl_source/cnn/conv.v">
+            <File Path="../user_source/hdl_source/cnn/resolution.v">
                 <FileInfo>
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
@@ -419,7 +419,7 @@
                     <Attr Name="CompileOrder" Val="66"/>
                 </FileInfo>
             </File>
-            <File Path="../user_source/hdl_source/cnn/conv_TOP.v">
+            <File Path="../user_source/hdl_source/cnn/TOP.v">
                 <FileInfo>
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
@@ -427,7 +427,7 @@
                     <Attr Name="CompileOrder" Val="67"/>
                 </FileInfo>
             </File>
-            <File Path="../user_source/hdl_source/cnn/database.v">
+            <File Path="../user_source/hdl_source/cnn/addressRAM.v">
                 <FileInfo>
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
@@ -435,7 +435,7 @@
                     <Attr Name="CompileOrder" Val="68"/>
                 </FileInfo>
             </File>
-            <File Path="../user_source/hdl_source/cnn/dense.v">
+            <File Path="../user_source/hdl_source/cnn/border.v">
                 <FileInfo>
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
@@ -443,7 +443,7 @@
                     <Attr Name="CompileOrder" Val="69"/>
                 </FileInfo>
             </File>
-            <File Path="../user_source/hdl_source/cnn/grayscale.v">
+            <File Path="../user_source/hdl_source/cnn/conv.v">
                 <FileInfo>
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
@@ -451,7 +451,7 @@
                     <Attr Name="CompileOrder" Val="70"/>
                 </FileInfo>
             </File>
-            <File Path="../user_source/hdl_source/cnn/maxpooling.v">
+            <File Path="../user_source/hdl_source/cnn/conv_TOP.v">
                 <FileInfo>
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
@@ -459,7 +459,7 @@
                     <Attr Name="CompileOrder" Val="71"/>
                 </FileInfo>
             </File>
-            <File Path="../user_source/hdl_source/cnn/RAM.v">
+            <File Path="../user_source/hdl_source/cnn/database.v">
                 <FileInfo>
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
@@ -467,7 +467,7 @@
                     <Attr Name="CompileOrder" Val="72"/>
                 </FileInfo>
             </File>
-            <File Path="../user_source/hdl_source/cnn/RAMtoMEM.v">
+            <File Path="../user_source/hdl_source/cnn/dense.v">
                 <FileInfo>
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
@@ -475,7 +475,7 @@
                     <Attr Name="CompileOrder" Val="73"/>
                 </FileInfo>
             </File>
-            <File Path="../user_source/hdl_source/cnn/resolution.v">
+            <File Path="../user_source/hdl_source/cnn/grayscale.v">
                 <FileInfo>
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
@@ -483,12 +483,36 @@
                     <Attr Name="CompileOrder" Val="74"/>
                 </FileInfo>
             </File>
-            <File Path="../user_source/hdl_source/cnn/result.v">
+            <File Path="../user_source/hdl_source/cnn/maxpooling.v">
                 <FileInfo>
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="75"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/cnn/RAM.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="76"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/cnn/RAMtoMEM.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="77"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/cnn/result.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="78"/>
                 </FileInfo>
             </File>
         </Verilog>

@@ -77,6 +77,8 @@ wire ddr_init_calib_complete;
 wire [3:0] cnn_result;
 wire cnn_result_valid;
 wire [2:0] image_mode;
+reg [2:0] image_mode_sync_1;
+reg [2:0] image_mode_sync_2;
 wire [3:0] control_key_event;
 wire [3:0] control_switch_state;
 
@@ -84,7 +86,7 @@ assign system_rst_n = pll_lock;
 assign O_screen_pwm = 1'b1;
 
 control_top u_control_top (
-    .I_clk          (hdmi_pixel_clk),
+    .I_clk          (clk_24m),
     .I_rst_n        (system_rst_n),
     .I_key_n        (I_key),
     .I_switch       (I_sw),
@@ -92,6 +94,16 @@ control_top u_control_top (
     .O_switch_state (control_switch_state),
     .O_image_mode   (image_mode)
 );
+
+always @(posedge hdmi_pixel_clk or negedge system_rst_n) begin
+    if (!system_rst_n) begin
+        image_mode_sync_1 <= 3'b001;
+        image_mode_sync_2 <= 3'b001;
+    end else begin
+        image_mode_sync_1 <= image_mode;
+        image_mode_sync_2 <= image_mode_sync_1;
+    end
+end
 
 PLL u_PLL (
     .refclk   (I_sys_clk),
@@ -175,7 +187,7 @@ img_processing #(
 ) u_img_processing (
     .I_clk    (hdmi_pixel_clk),
     .I_rst_n  (system_rst_n),
-    .I_mode   (image_mode),
+    .I_mode   (image_mode_sync_2),
     .I_rgb    (display_video_data),
     .I_vsync  (process_video_vsync),
     .I_hsync  (process_video_hsync),
@@ -210,7 +222,7 @@ display_top u_display_top (
     .I_video_de     (processed_video_de),
     .I_video_user   (processed_video_user),
     .I_video_last   (processed_video_last),
-    .I_debug_status (cnn_result_valid ? cnn_result : 4'd0),
+    .I_debug_status (cnn_result),
     .O_video_vsync  (display_video_vsync),
     .O_video_rd_en  (display_video_rd_en),
     .O_process_vsync(process_video_vsync),

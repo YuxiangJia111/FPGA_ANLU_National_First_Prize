@@ -131,7 +131,7 @@ end
 always @(posedge cnn_clk or negedge I_rst_n) begin
     if (!I_rst_n) begin
         cnn_go         <= 1'b1;
-        O_result       <= 4'hf;
+        O_result       <= 4'd0;
         O_result_valid <= 1'b0;
     end else begin
         if (preprocess_done) begin

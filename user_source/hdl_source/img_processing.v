@@ -51,18 +51,45 @@ module img_processing #(
     wire         hist_de;
     wire         hist_user;
     wire         hist_last;
+    wire [23:0]  ae_ycbcr;
+    wire [23:0]  ae_rgb;
 
     wire [23:0] equalized_rgb;
     wire [23:0] output_rgb_aligned;
     wire [23:0] output_ycbcr_aligned;
     wire [7:0]  output_sobel_aligned;
     wire [2:0]  output_mode_aligned;
-    wire         output_vsync_aligned;
-    wire         output_hsync_aligned;
-    wire         output_de_aligned;
-    wire         output_user_aligned;
-    wire         output_last_aligned;
+    wire        output_vsync_aligned;
+    wire        output_hsync_aligned;
+    wire        output_de_aligned;
+    wire        output_user_aligned;
+    wire        output_last_aligned;
 
+    auto_exposure #(
+        .IMG_WIDTH  (IMG_WIDTH),
+        .IMG_HEIGHT (IMG_HEIGHT)
+    ) u_auto_exposure (
+        .I_clk       (I_clk),
+        .I_rst_n     (I_rst_n),
+        .I_ycbcr     (hist_ycbcr),
+        .I_vsync     (hist_vsync),
+        .I_hsync     (hist_hsync),
+        .I_de        (hist_de),
+        .I_user      (hist_user),
+        .I_last      (hist_last),
+        .O_ycbcr     (ae_ycbcr),
+        .O_vsync     (),
+        .O_hsync     (),
+        .O_de        (),
+        .O_user      (),
+        .O_last      (),
+        .O_lut_select()
+    );
+
+    ycbcr2rgb u_ycbcr2rgb_auto_exposure (
+        .I_ycbcr (ae_ycbcr),
+        .O_rgb   (ae_rgb)
+    );
     rgb2ycbcr u_rgb2ycbcr (
         .I_clk       (I_clk),
         .I_rst_n     (I_rst_n),
@@ -166,7 +193,8 @@ module img_processing #(
             3'b010: O_rgb = (output_ycbcr_aligned[23:16] >= 8'd128) ?
                             24'hffffff : 24'h000000;
             3'b011: O_rgb = {3{output_sobel_aligned}};
-            3'b100: O_rgb = equalized_rgb;
+            3'b100: O_rgb = ae_rgb;
+            3'b101: O_rgb = equalized_rgb;
             default: O_rgb = output_rgb_aligned;
         endcase
     end
