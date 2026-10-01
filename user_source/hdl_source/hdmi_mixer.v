@@ -630,7 +630,7 @@ module hdmi_mixer #(
                 S_dyn_y = S_y_2d - DYN_OSD_Y;
 
                 // Unified prefix render using one character library.
-                // an:[0..23], lu:[24..47], C:[52..67], N:[68..83], T:[84..99], :[100..107]
+                // an:[0..23], lu:[24..47], C:[52..67], N:[68..83], N:[84..99], :[100..107]
                 if((S_dyn_x < 12'd108) && (S_dyn_y < 12'd24)) begin
                     if((S_dyn_x < 12'd24) || ((S_dyn_x >= 12'd24) && (S_dyn_x < 12'd48))) begin
                         if(S_dyn_y >= CN_Y_OFFSET)
@@ -683,7 +683,7 @@ module hdmi_mixer #(
                             S_pf_local_x = S_dyn_x - 12'd68;
                         end
                         else begin
-                            S_pf_char = CHAR_T;
+                            S_pf_char = CHAR_N;
                             S_pf_local_x = S_dyn_x - 12'd84;
                         end
                         S_pf_local_y = S_dyn_y - 12'd4;
@@ -741,37 +741,38 @@ module hdmi_mixer #(
                         S_dyn_on = 1'b1;
                 end
 
-                // Decimal 6 digits starts at x=110. Each digit is 15x24.
+                // Show the CNN class as a zero-padded decimal value.
                 if((S_dyn_x >= 12'd110) && (S_dyn_x < 12'd200)) begin
                     if(S_dyn_x < 12'd125) begin
                         S_dyn_digit_idx = 4'd0;
                         S_dyn_digit_x = S_dyn_x - 12'd110;
-                        S_dyn_dec_digit = S_cnt_d5;
+                        S_dyn_dec_digit = 4'd0;
                     end
                     else if(S_dyn_x < 12'd140) begin
                         S_dyn_digit_idx = 4'd1;
                         S_dyn_digit_x = S_dyn_x - 12'd125;
-                        S_dyn_dec_digit = S_cnt_d4;
+                        S_dyn_dec_digit = 4'd0;
                     end
                     else if(S_dyn_x < 12'd155) begin
                         S_dyn_digit_idx = 4'd2;
                         S_dyn_digit_x = S_dyn_x - 12'd140;
-                        S_dyn_dec_digit = S_cnt_d3;
+                        S_dyn_dec_digit = 4'd0;
                     end
                     else if(S_dyn_x < 12'd170) begin
                         S_dyn_digit_idx = 4'd3;
                         S_dyn_digit_x = S_dyn_x - 12'd155;
-                        S_dyn_dec_digit = S_cnt_d2;
+                        S_dyn_dec_digit = 4'd0;
                     end
                     else if(S_dyn_x < 12'd185) begin
                         S_dyn_digit_idx = 4'd4;
                         S_dyn_digit_x = S_dyn_x - 12'd170;
-                        S_dyn_dec_digit = S_cnt_d1;
+                        S_dyn_dec_digit = (I_debug_status >= 4'd10) ? 4'd1 : 4'd0;
                     end
                     else begin
                         S_dyn_digit_idx = 4'd5;
                         S_dyn_digit_x = S_dyn_x - 12'd185;
-                        S_dyn_dec_digit = S_cnt_d0;
+                        S_dyn_dec_digit = (I_debug_status >= 4'd10) ?
+                                          (I_debug_status - 4'd10) : I_debug_status;
                     end
 
                     // Render decimal digits through unified 16x16 character library.

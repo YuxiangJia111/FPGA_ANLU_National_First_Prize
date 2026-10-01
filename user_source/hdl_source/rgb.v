@@ -40,6 +40,29 @@ module rgb2ycbcr (
     reg [2:0] mode_2;
     reg vsync_2, hsync_2, de_2, user_2, last_2;
 
+    // The coefficients are constants, so shift/add networks are equivalent
+    // to the original multipliers without consuming DSP blocks.
+    wire signed [16:0] r_s = $signed({1'b0, I_rgb[23:16]});
+    wire signed [16:0] g_s = $signed({1'b0, I_rgb[15:8]});
+    wire signed [16:0] b_s = $signed({1'b0, I_rgb[7:0]});
+    wire [15:0] r_u = {8'd0, I_rgb[23:16]};
+    wire [15:0] g_u = {8'd0, I_rgb[15:8]};
+    wire [15:0] b_u = {8'd0, I_rgb[7:0]};
+    wire [14:0] y_r_const = (r_u << 6) + (r_u << 3) +
+                            (r_u << 2) + r_u;
+    wire [15:0] y_g_const = (g_u << 7) + (g_u << 4) +
+                            (g_u << 2) + (g_u << 1);
+    wire [12:0] y_b_const = (b_u << 5) - (b_u << 1) - b_u;
+    wire signed [16:0] cb_r_const = -((r_s <<< 5) + (r_s <<< 3) +
+                                      (r_s <<< 1) + r_s);
+    wire signed [16:0] cb_g_const = -((g_s <<< 6) + (g_s <<< 4) +
+                                      (g_s <<< 2) + g_s);
+    wire signed [17:0] cb_b_const = b_s <<< 7;
+    wire signed [17:0] cr_r_const = r_s <<< 7;
+    wire signed [17:0] cr_g_const = -((g_s <<< 6) + (g_s <<< 5) +
+                                      (g_s <<< 3) + (g_s <<< 1) + g_s);
+    wire signed [16:0] cr_b_const = -((b_s <<< 4) + (b_s <<< 2) + b_s);
+
     always @(posedge I_clk or negedge I_rst_n) begin
         if(!I_rst_n) begin
             y_r_mul_1  <= 15'd0;
@@ -59,15 +82,15 @@ module rgb2ycbcr (
             user_1     <= 1'b0;
             last_1     <= 1'b0;
         end else begin
-            y_r_mul_1  <= I_rgb[23:16] * 8'd77;
-            y_g_mul_1  <= I_rgb[15:8]  * 8'd150;
-            y_b_mul_1  <= I_rgb[7:0]   * 8'd29;
-            cb_r_mul_1 <= -$signed({1'b0, I_rgb[23:16]}) * 9'sd43;
-            cb_g_mul_1 <= -$signed({1'b0, I_rgb[15:8]})  * 9'sd85;
-            cb_b_mul_1 <=  $signed({1'b0, I_rgb[7:0]})   * 9'sd128;
-            cr_r_mul_1 <=  $signed({1'b0, I_rgb[23:16]}) * 9'sd128;
-            cr_g_mul_1 <= -$signed({1'b0, I_rgb[15:8]})  * 9'sd107;
-            cr_b_mul_1 <= -$signed({1'b0, I_rgb[7:0]})   * 9'sd21;
+            y_r_mul_1  <= y_r_const;
+            y_g_mul_1  <= y_g_const;
+            y_b_mul_1  <= y_b_const;
+            cb_r_mul_1 <= cb_r_const;
+            cb_g_mul_1 <= cb_g_const;
+            cb_b_mul_1 <= cb_b_const;
+            cr_r_mul_1 <= cr_r_const;
+            cr_g_mul_1 <= cr_g_const;
+            cr_b_mul_1 <= cr_b_const;
             rgb_1      <= I_rgb;
             mode_1     <= I_mode;
             vsync_1    <= I_vsync;

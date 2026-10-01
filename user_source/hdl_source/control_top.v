@@ -22,28 +22,28 @@ module control_top (
     reg  [3:0] switch_sync_2;
     reg  [2:0] selected_mode;
 
-    key_remove_shakes u_key1_debounce (
+    key_remove_shakes #(.DELAY_CYCLES(315000)) u_key1_debounce (
         .I_clk          (I_clk),
         .I_rst_n        (I_rst_n),
         .I_key_in       (I_key_n[0]),
         .O_key_trig_out (key_event[0])
     );
 
-    key_remove_shakes u_key2_debounce (
+    key_remove_shakes #(.DELAY_CYCLES(315000)) u_key2_debounce (
         .I_clk          (I_clk),
         .I_rst_n        (I_rst_n),
         .I_key_in       (I_key_n[1]),
         .O_key_trig_out (key_event[1])
     );
 
-    key_remove_shakes u_key3_debounce (
+    key_remove_shakes #(.DELAY_CYCLES(315000)) u_key3_debounce (
         .I_clk          (I_clk),
         .I_rst_n        (I_rst_n),
         .I_key_in       (I_key_n[2]),
         .O_key_trig_out (key_event[2])
     );
 
-    key_remove_shakes u_key4_debounce (
+    key_remove_shakes #(.DELAY_CYCLES(315000)) u_key4_debounce (
         .I_clk          (I_clk),
         .I_rst_n        (I_rst_n),
         .I_key_in       (I_key_n[3]),
