@@ -15,6 +15,11 @@ module hdmi_mixer #(
     input wire        I_video_last,
 
     input wire[3:0]   I_debug_status,
+    input wire[11:0]  I_bbox_x_min,
+    input wire[11:0]  I_bbox_x_max,
+    input wire[11:0]  I_bbox_y_min,
+    input wire[11:0]  I_bbox_y_max,
+    input wire        I_bbox_valid,
 
     output wire       O_video_rd_en,
     input wire[23:0]  I_video_rd_data,
@@ -112,6 +117,8 @@ module hdmi_mixer #(
     localparam DYN_OSD_H         = 12'd24;
     localparam CN_Y_OFFSET       = 12'd2;
     localparam COLOR_DYN_TEXT    = 24'hfff200;
+    localparam COLOR_BBOX        = 24'hff0000;
+    localparam BBOX_THICKNESS    = 12'd2;
     localparam CHAR_AN           = 8'h80;
     localparam CHAR_LU           = 8'h81;
     localparam CHAR_C            = 8'h43;
@@ -813,6 +820,18 @@ module hdmi_mixer #(
                     S_osd_hit = 1'b1;
                     S_osd_color = COLOR_DYN_TEXT;
                 end
+            end
+
+            // The detection box is the highest-priority overlay.
+            if(I_bbox_valid &&
+               (S_x_2d >= I_bbox_x_min) && (S_x_2d <= I_bbox_x_max) &&
+               (S_y_2d >= I_bbox_y_min) && (S_y_2d <= I_bbox_y_max) &&
+               (((S_y_2d - I_bbox_y_min) < BBOX_THICKNESS) ||
+                ((I_bbox_y_max - S_y_2d) < BBOX_THICKNESS) ||
+                ((S_x_2d - I_bbox_x_min) < BBOX_THICKNESS) ||
+                ((I_bbox_x_max - S_x_2d) < BBOX_THICKNESS))) begin
+                S_osd_hit   = 1'b1;
+                S_osd_color = COLOR_BBOX;
             end
         end
     end

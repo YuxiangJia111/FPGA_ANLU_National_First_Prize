@@ -76,6 +76,11 @@ wire [3:0] ddr_debug_status;
 wire ddr_init_calib_complete;
 wire [3:0] cnn_result;
 wire cnn_result_valid;
+wire [11:0] bbox_x_min;
+wire [11:0] bbox_x_max;
+wire [11:0] bbox_y_min;
+wire [11:0] bbox_y_max;
+wire bbox_valid;
 wire [2:0] image_mode;
 reg [2:0] image_mode_sync_1;
 reg [2:0] image_mode_sync_2;
@@ -212,6 +217,20 @@ cnn_inference_top u_cnn_inference_top (
     .O_result_valid (cnn_result_valid)
 );
 
+digit_bbox u_digit_bbox (
+    .I_clk        (hdmi_pixel_clk),
+    .I_rst_n      (system_rst_n),
+    .I_rgb        (display_video_data),
+    .I_de         (process_video_de),
+    .I_user       (process_video_user),
+    .I_last       (process_video_last),
+    .O_x_min      (bbox_x_min),
+    .O_x_max      (bbox_x_max),
+    .O_y_min      (bbox_y_min),
+    .O_y_max      (bbox_y_max),
+    .O_bbox_valid (bbox_valid)
+);
+
 display_top u_display_top (
     .I_pixel_clk    (hdmi_pixel_clk),
     .I_serial_clk   (hdmi_serial_clk),
@@ -223,6 +242,11 @@ display_top u_display_top (
     .I_video_user   (processed_video_user),
     .I_video_last   (processed_video_last),
     .I_debug_status (cnn_result),
+    .I_bbox_x_min   (bbox_x_min),
+    .I_bbox_x_max   (bbox_x_max),
+    .I_bbox_y_min   (bbox_y_min),
+    .I_bbox_y_max   (bbox_y_max),
+    .I_bbox_valid   (bbox_valid),
     .O_video_vsync  (display_video_vsync),
     .O_video_rd_en  (display_video_rd_en),
     .O_process_vsync(process_video_vsync),
