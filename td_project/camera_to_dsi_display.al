@@ -9,6 +9,9 @@
         <Device>PH1P35MDG324</Device>
         <Speed>-3</Speed>
     </HardWare>
+    <MiscSettings>
+        <Setting Key="farm" Val="disable" />
+    </MiscSettings>
     <Source_Files>
         <Verilog>
             <File Path="../user_source/hdl_source/design_top_wrapper.v">
@@ -365,6 +368,7 @@
             </File>
             <File Path="../user_source/hdl_source/sobel.v">
                 <FileInfo>
+                    <Attr Name="AutoExcluded" Val="true"/>
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
@@ -373,6 +377,7 @@
             </File>
             <File Path="../user_source/hdl_source/histogram_equalization.v">
                 <FileInfo>
+                    <Attr Name="AutoExcluded" Val="true"/>
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
@@ -381,6 +386,7 @@
             </File>
             <File Path="../user_source/hdl_source/auto_exposure.v">
                 <FileInfo>
+                    <Attr Name="AutoExcluded" Val="true"/>
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
@@ -389,6 +395,7 @@
             </File>
             <File Path="../user_source/hdl_source/y_lut.v">
                 <FileInfo>
+                    <Attr Name="AutoExcluded" Val="true"/>
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
@@ -397,6 +404,7 @@
             </File>
             <File Path="../user_source/hdl_source/ycbcr2rgb.v">
                 <FileInfo>
+                    <Attr Name="AutoExcluded" Val="true"/>
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
@@ -405,6 +413,7 @@
             </File>
             <File Path="../user_source/hdl_source/cnn/cnn_inference_top.v">
                 <FileInfo>
+                    <Attr Name="AutoExcluded" Val="true"/>
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
@@ -413,6 +422,7 @@
             </File>
             <File Path="../user_source/hdl_source/cnn/resolution.v">
                 <FileInfo>
+                    <Attr Name="AutoExcluded" Val="true"/>
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
@@ -477,6 +487,7 @@
             </File>
             <File Path="../user_source/hdl_source/cnn/grayscale.v">
                 <FileInfo>
+                    <Attr Name="AutoExcluded" Val="true"/>
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
@@ -517,10 +528,35 @@
             </File>
             <File Path="../user_source/hdl_source/digit_bbox.v">
                 <FileInfo>
+                    <Attr Name="AutoExcluded" Val="true"/>
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="79"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/digit_multi_bbox.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="80"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/bbox_gray_downsampler.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="84"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/bbox_cnn_adapter.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="86"/>
                 </FileInfo>
             </File>
         </Verilog>
@@ -665,6 +701,39 @@
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="33"/>
+                </FileInfo>
+            </File>
+            <File Path="al_ip/bbox_bitmap_ram/bbox_bitmap_ram.xml">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="81"/>
+                </FileInfo>
+            </File>
+            <File Path="al_ip/bbox_gray_line_ram_ip/bbox_gray_line_ram_ip.xml">
+                <FileInfo>
+                    <Attr Name="AutoExcluded" Val="true"/>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="82"/>
+                </FileInfo>
+            </File>
+            <File Path="al_ip/bbox_gray_result_ram_ip/bbox_gray_result_ram_ip.xml">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="83"/>
+                </FileInfo>
+            </File>
+            <File Path="al_ip/bbox_gray_frame_ram_ip/bbox_gray_frame_ram_ip.xml">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="85"/>
                 </FileInfo>
             </File>
         </IP_FILE>

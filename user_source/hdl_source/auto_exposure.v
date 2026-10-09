@@ -24,6 +24,7 @@ module auto_exposure #(
     localparam [1:0] LUT_BRIGHTEN = 2'd0;
     localparam [1:0] LUT_NORMAL   = 2'd1;
     localparam [1:0] LUT_DARKEN   = 2'd2;
+
     localparam integer SAMPLE_COUNT = (IMG_WIDTH / 2) * (IMG_HEIGHT / 2);
     localparam integer DARK_ENTER   = (SAMPLE_COUNT * 40) / 100;
     localparam integer DARK_EXIT    = (SAMPLE_COUNT * 25) / 100;
@@ -47,7 +48,9 @@ module auto_exposure #(
                       (bright_count < (SAMPLE_COUNT * 15) / 100);
     wire bright_scene = (bright_count >= BRIGHT_ENTER) &&
                         (dark_count < (SAMPLE_COUNT * 20) / 100);
+
     wire [7:0] adjusted_y;
+    wire [23:0] lut_ycbcr;
 
     y_lut u_y_lut (
         .lut_select (lut_select),
@@ -55,7 +58,8 @@ module auto_exposure #(
         .y_out      (adjusted_y)
     );
 
-    assign O_ycbcr = {adjusted_y, I_ycbcr[15:0]};
+    assign lut_ycbcr = {adjusted_y, I_ycbcr[15:0]};
+    assign O_ycbcr = lut_ycbcr;
     assign O_vsync = I_vsync;
     assign O_hsync = I_hsync;
     assign O_de    = I_de;
@@ -65,17 +69,19 @@ module auto_exposure #(
 
     always @(posedge I_clk or negedge I_rst_n) begin
         if (!I_rst_n) begin
-            dark_count     <= 18'd0;
-            bright_count   <= 18'd0;
-            pixel_x        <= 11'd0;
-            line_odd       <= 1'b0;
-            frame_seen     <= 1'b0;
-            lut_select     <= LUT_NORMAL;
-            dark_confirm   <= 2'd0;
+            dark_count    <= 18'd0;
+            bright_count  <= 18'd0;
+            pixel_x       <= 11'd0;
+            line_odd      <= 1'b0;
+            frame_seen    <= 1'b0;
+            lut_select    <= LUT_NORMAL;
+            dark_confirm  <= 2'd0;
             bright_confirm <= 2'd0;
             for (i = 0; i < 16; i = i + 1)
                 histogram[i] <= 18'd0;
         end else begin
+            // I_user marks the first valid pixel of a new frame. The old
+            // frame's statistics are consumed before its counters are reset.
             if (I_user) begin
                 if (frame_seen) begin
                     case (lut_select)
@@ -145,6 +151,7 @@ module auto_exposure #(
                     if (y_in >= 224)
                         bright_count <= bright_count + 1'b1;
                 end
+
                 if (I_de)
                     pixel_x <= (pixel_x == IMG_WIDTH - 1) ? 11'd0 : pixel_x + 1'b1;
                 if (I_last) begin
@@ -154,4 +161,5 @@ module auto_exposure #(
             end
         end
     end
+
 endmodule

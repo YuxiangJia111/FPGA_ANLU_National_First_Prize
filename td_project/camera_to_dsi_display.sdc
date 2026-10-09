@@ -15,3 +15,24 @@ set_clock_groups -asynchronous \
     -group [get_clocks {mipi_rx_ck_pad MIPI_RX_BYTE_CLK}] \
     -group [get_clocks {sys_clk_50m pll_clk_100m pll_clk_24m HDMI_PIXEL_CLK HDMI_SERIAL_CLK}] \
     -group [get_clocks {u_DDR_top/u_ph1p35_324_ddr_wrapper/u_ddr2/ddr_clk u_DDR_top/u_ph1p35_324_ddr_wrapper/u_ddr2/usr_clk}]
+
+# CNN mailbox toggles are synchronized; keep the second stages normally timed.
+set_false_path -to [get_cells {u_bbox_cnn_adapter/pixel_request_sync_1_reg*}]
+set_false_path -to [get_cells {u_bbox_cnn_adapter/pixel_ack_sync_1_reg*}]
+set_false_path -to [get_cells {u_bbox_cnn_adapter/result_request_sync_1_reg*}]
+set_false_path -to [get_cells {u_bbox_cnn_adapter/result_ack_sync_1_reg*}]
+
+# Bundled data is held until acknowledgment. Request synchronization gives at
+# least two receiving periods before capture (84 ns to CNN, 26.666 ns to HDMI).
+set_max_delay 40.000 \
+    -from [get_cells {u_bbox_cnn_adapter/pixel_mailbox_data_reg* u_bbox_cnn_adapter/pixel_mailbox_addr_reg*}] \
+    -to [get_cells {u_bbox_cnn_adapter/O_cnn_data_reg* u_bbox_cnn_adapter/O_cnn_addr_reg*}]
+set_max_delay 20.000 \
+    -from [get_cells {u_bbox_cnn_adapter/result_mailbox_data_reg*}] \
+    -to [get_cells {u_bbox_cnn_adapter/batch_digits_reg* u_bbox_cnn_adapter/batch_digit_valid_reg*}]
+set_min_delay 0.000 \
+    -from [get_cells {u_bbox_cnn_adapter/pixel_mailbox_data_reg* u_bbox_cnn_adapter/pixel_mailbox_addr_reg*}] \
+    -to [get_cells {u_bbox_cnn_adapter/O_cnn_data_reg* u_bbox_cnn_adapter/O_cnn_addr_reg*}]
+set_min_delay 0.000 \
+    -from [get_cells {u_bbox_cnn_adapter/result_mailbox_data_reg*}] \
+    -to [get_cells {u_bbox_cnn_adapter/batch_digits_reg* u_bbox_cnn_adapter/batch_digit_valid_reg*}]

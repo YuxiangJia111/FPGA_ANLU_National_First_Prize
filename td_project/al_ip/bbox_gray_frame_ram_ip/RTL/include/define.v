@@ -1,0 +1,8 @@
+`define SDP_RAM_e78534da668e
+`define OREGSET_A_e78534da668e
+`define ASYNC_RELEASE_A_e78534da668e
+`define OUTREG_DISB_e78534da668e
+`define OREGSET_B_e78534da668e
+`define COMMON_CLK_e78534da668e
+`define WEA_EN_e78534da668e
+`define PH1P_e78534da668e

@@ -5,6 +5,8 @@ module SC500CS_top (
     input  wire        I_lp_clk,
     input  wire        I_rst_n,
     input  wire [3:0]  I_key_n,
+    input  wire [15:0] I_display_param_a,
+    input  wire [15:0] I_display_param_b,
 
     output wire        O_cam_scl,
     inout  wire        IO_cam_sda,
@@ -63,8 +65,8 @@ seg7_scan8 #(
 ) u_seg7_scan8 (
     .I_clk      (I_ctrl_clk),
     .I_rst_n    (I_rst_n),
-    .I_exposure (ae_value),
-    .I_gain     (ag_value),
+    .I_param_a  (I_display_param_a),
+    .I_param_b  (I_display_param_b),
     .O_DIG      (O_DIG),
     .O_SEL      (O_SEL)
 );

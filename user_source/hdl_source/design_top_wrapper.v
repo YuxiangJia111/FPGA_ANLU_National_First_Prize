@@ -72,23 +72,69 @@ wire processed_video_hsync;
 wire processed_video_de;
 wire processed_video_user;
 wire processed_video_last;
+wire [7:0] bbox_valid;
+wire [95:0] bbox_x_min;
+wire [95:0] bbox_x_max;
+wire [95:0] bbox_y_min;
+wire [95:0] bbox_y_max;
+wire bbox_frame_valid;
+wire downsample_valid;
+wire [10:0] downsample_pixel;
+wire [9:0] downsample_pixel_addr;
+wire [2:0] downsample_box_index;
+wire [2:0] downsample_source_slot;
+wire [3:0] downsample_box_count;
+wire downsample_box_start;
+wire downsample_box_end;
+wire downsample_batch_done;
+wire downsample_ready;
+wire cnn_crop_accept;
+wire cnn_go;
+wire cnn_write;
+wire [10:0] cnn_pixel;
+wire [12:0] cnn_pixel_addr;
+wire cnn_stop;
+wire [3:0] cnn_result;
+wire [7:0] cnn_bbox_valid;
+wire [95:0] cnn_bbox_x_min;
+wire [95:0] cnn_bbox_x_max;
+wire [95:0] cnn_bbox_y_min;
+wire [95:0] cnn_bbox_y_max;
+wire [7:0] cnn_digit_valid;
+wire [31:0] cnn_digits;
+wire [15:0] gray_frame_read_addr;
+wire gray_frame_read_bank;
+wire [3:0] gray_frame_read_data;
+wire crop_frame_valid;
+wire crop_frame_bank;
+wire crop_source_busy;
+wire [7:0] crop_bbox_valid;
+wire [95:0] crop_x_min;
+wire [95:0] crop_x_max;
+wire [95:0] crop_y_min;
+wire [95:0] crop_y_max;
 wire [3:0] ddr_debug_status;
 wire ddr_init_calib_complete;
-wire [3:0] cnn_result;
-wire cnn_result_valid;
-wire [11:0] bbox_x_min;
-wire [11:0] bbox_x_max;
-wire [11:0] bbox_y_min;
-wire [11:0] bbox_y_max;
-wire bbox_valid;
 wire [2:0] image_mode;
+wire debug_view;
 reg [2:0] image_mode_sync_1;
 reg [2:0] image_mode_sync_2;
+reg [2:0] debug_box_sync_1;
+reg [2:0] debug_box_sync_2;
+reg [3:0] downsample_box_count_sync_1;
+reg [3:0] downsample_box_count_sync_2;
 wire [3:0] control_key_event;
 wire [3:0] control_switch_state;
+wire [7:0] bbox_luma_threshold_ctrl;
+wire [2:0] bbox_connect_gap_ctrl;
+reg  [7:0] bbox_luma_threshold_sync_1;
+reg  [7:0] bbox_luma_threshold_sync_2;
+reg  [2:0] bbox_connect_gap_sync_1;
+reg  [2:0] bbox_connect_gap_sync_2;
 
 assign system_rst_n = pll_lock;
 assign O_screen_pwm = 1'b1;
+assign debug_view = (image_mode_sync_2 == 3'b110);
 
 control_top u_control_top (
     .I_clk          (clk_24m),
@@ -97,16 +143,40 @@ control_top u_control_top (
     .I_switch       (I_sw),
     .O_key_event    (control_key_event),
     .O_switch_state (control_switch_state),
-    .O_image_mode   (image_mode)
+    .O_image_mode   (image_mode),
+    .O_bbox_luma_threshold (bbox_luma_threshold_ctrl),
+    .O_bbox_connect_gap    (bbox_connect_gap_ctrl)
 );
 
 always @(posedge hdmi_pixel_clk or negedge system_rst_n) begin
-    if (!system_rst_n) begin
+    if(!system_rst_n) begin
         image_mode_sync_1 <= 3'b001;
         image_mode_sync_2 <= 3'b001;
+        debug_box_sync_1  <= 3'd0;
+        debug_box_sync_2  <= 3'd0;
+        bbox_luma_threshold_sync_1 <= 8'd55;
+        bbox_luma_threshold_sync_2 <= 8'd55;
+        bbox_connect_gap_sync_1    <= 3'd4;
+        bbox_connect_gap_sync_2    <= 3'd4;
     end else begin
         image_mode_sync_1 <= image_mode;
         image_mode_sync_2 <= image_mode_sync_1;
+        debug_box_sync_1  <= control_switch_state[2:0];
+        debug_box_sync_2  <= debug_box_sync_1;
+        bbox_luma_threshold_sync_1 <= bbox_luma_threshold_ctrl;
+        bbox_luma_threshold_sync_2 <= bbox_luma_threshold_sync_1;
+        bbox_connect_gap_sync_1    <= bbox_connect_gap_ctrl;
+        bbox_connect_gap_sync_2    <= bbox_connect_gap_sync_1;
+    end
+end
+
+always @(posedge clk_24m or negedge system_rst_n) begin
+    if(!system_rst_n) begin
+        downsample_box_count_sync_1 <= 4'd0;
+        downsample_box_count_sync_2 <= 4'd0;
+    end else begin
+        downsample_box_count_sync_1 <= downsample_box_count;
+        downsample_box_count_sync_2 <= downsample_box_count_sync_1;
     end
 end
 
@@ -125,6 +195,12 @@ SC500CS_top u_SC500CS_top (
     .I_lp_clk           (clk_100m),
     .I_rst_n            (system_rst_n),
     .I_key_n            (4'hf),
+    .I_display_param_a ((image_mode == 3'b110) ?
+                        {13'd0, control_switch_state[2:0]} :
+                        {8'd0, bbox_luma_threshold_ctrl}),
+    .I_display_param_b ((image_mode == 3'b110) ?
+                        {12'd0, downsample_box_count_sync_2} :
+                        {13'd0, bbox_connect_gap_ctrl}),
     .O_cam_scl          (O_cam_scl),
     .IO_cam_sda         (IO_cam_sda),
     .O_cam_24m          (O_cam_24m),
@@ -208,27 +284,132 @@ img_processing #(
     .O_last   (processed_video_last)
 );
 
-cnn_inference_top u_cnn_inference_top (
-    .I_pixel_clk    (hdmi_pixel_clk),
-    .I_rst_n        (system_rst_n),
-    .I_rgb          (display_video_data),
-    .I_de           (process_video_de),
-    .O_result       (cnn_result),
-    .O_result_valid (cnn_result_valid)
+digit_multi_bbox #(
+    .IMG_WIDTH      (1280),
+    .IMG_HEIGHT     (720),
+    .ROI_X_MIN      (198),
+    .ROI_X_MAX      (1022),
+    .ROI_Y_MIN      (18),
+    .ROI_Y_MAX      (702),
+    .LUMA_THRESHOLD (55),
+    .SAMPLE_STEP    (3),
+    .MAX_BOXES      (8),
+    .CONNECT_GAP    (4),
+    .MAX_ROW_GAP    (2),
+    .MIN_RUN_WIDTH  (1),
+    .MIN_BOX_WIDTH  (4),
+    .MIN_BOX_HEIGHT (8),
+    .MIN_AREA       (8),
+    .BOX_MARGIN     (4),
+    .USE_GRAY_ERAM_IP (1)
+) u_digit_multi_bbox (
+    .I_clk                (hdmi_pixel_clk),
+    .I_rst_n              (system_rst_n),
+    .I_luma               (processed_ycbcr_data[23:16]),
+    .I_luma_threshold     (bbox_luma_threshold_sync_2),
+    .I_connect_gap        (bbox_connect_gap_sync_2),
+    .I_crop_busy          (crop_source_busy),
+    .I_gray_read_addr     (gray_frame_read_addr),
+    .I_gray_read_bank     (gray_frame_read_bank),
+    .O_gray_read_data     (gray_frame_read_data),
+    .I_de                 (processed_video_de),
+    .I_user               (processed_video_user),
+    .I_last               (processed_video_last),
+    .O_bbox_valid         (bbox_valid),
+    .O_x_min              (bbox_x_min),
+    .O_x_max              (bbox_x_max),
+    .O_y_min              (bbox_y_min),
+    .O_y_max              (bbox_y_max),
+    .O_bbox_frame_valid   (bbox_frame_valid),
+    .O_crop_frame_valid   (crop_frame_valid),
+    .O_crop_bank          (crop_frame_bank),
+    .O_crop_bbox_valid    (crop_bbox_valid),
+    .O_crop_x_min         (crop_x_min),
+    .O_crop_x_max         (crop_x_max),
+    .O_crop_y_min         (crop_y_min),
+    .O_crop_y_max         (crop_y_max)
 );
 
-digit_bbox u_digit_bbox (
-    .I_clk        (hdmi_pixel_clk),
-    .I_rst_n      (system_rst_n),
-    .I_rgb        (display_video_data),
-    .I_de         (process_video_de),
-    .I_user       (process_video_user),
-    .I_last       (process_video_last),
-    .O_x_min      (bbox_x_min),
-    .O_x_max      (bbox_x_max),
-    .O_y_min      (bbox_y_min),
-    .O_y_max      (bbox_y_max),
-    .O_bbox_valid (bbox_valid)
+bbox_gray_downsampler #(
+    .ROI_X_MIN   (198),
+    .ROI_X_MAX   (1022),
+    .ROI_Y_MIN   (18),
+    .ROI_Y_MAX   (702),
+    .SAMPLE_STEP (3),
+    .MAX_BOXES   (8),
+    .OUTPUT_SIZE (28),
+    .USE_RESULT_ERAM (1)
+) u_bbox_gray_downsampler (
+    .I_clk          (hdmi_pixel_clk),
+    .I_rst_n        (system_rst_n),
+    .I_crop_update  (cnn_crop_accept),
+    .I_crop_bank    (crop_frame_bank),
+    .I_bbox_valid   (crop_bbox_valid),
+    .I_x_min        (crop_x_min),
+    .I_x_max        (crop_x_max),
+    .I_y_min        (crop_y_min),
+    .I_y_max        (crop_y_max),
+    .I_gray_read_data (gray_frame_read_data),
+    .O_gray_read_addr (gray_frame_read_addr),
+    .O_gray_read_bank (gray_frame_read_bank),
+    .O_crop_busy      (crop_source_busy),
+    .I_ready        (downsample_ready),
+    .O_valid        (downsample_valid),
+    .O_pixel        (downsample_pixel),
+    .O_pixel_addr   (downsample_pixel_addr),
+    .O_box_index    (downsample_box_index),
+    .O_source_slot  (downsample_source_slot),
+    .O_box_count    (downsample_box_count),
+    .O_box_start    (downsample_box_start),
+    .O_box_end      (downsample_box_end),
+    .O_batch_done   (downsample_batch_done)
+);
+
+bbox_cnn_adapter u_bbox_cnn_adapter (
+    .I_pixel_clk    (hdmi_pixel_clk),
+    .I_cnn_clk      (clk_24m),
+    .I_rst_n        (system_rst_n),
+    .I_video_user   (processed_video_user),
+    .I_crop_update  (crop_frame_valid),
+    .I_bbox_valid   (crop_bbox_valid),
+    .I_x_min        (crop_x_min),
+    .I_x_max        (crop_x_max),
+    .I_y_min        (crop_y_min),
+    .I_y_max        (crop_y_max),
+    .O_crop_accept  (cnn_crop_accept),
+    .O_batch_busy   (),
+    .O_batch_done   (),
+    .I_valid        (downsample_valid),
+    .O_ready        (downsample_ready),
+    .I_pixel        (downsample_pixel),
+    .I_pixel_addr   (downsample_pixel_addr),
+    .I_box_index    (downsample_box_index),
+    .I_source_slot  (downsample_source_slot),
+    .I_box_count    (downsample_box_count),
+    .I_batch_done   (downsample_batch_done),
+    .O_cnn_go       (cnn_go),
+    .O_cnn_we       (cnn_write),
+    .O_cnn_data     (cnn_pixel),
+    .O_cnn_addr     (cnn_pixel_addr),
+    .I_cnn_stop     (cnn_stop),
+    .I_cnn_result   (cnn_result),
+    .O_bbox_valid   (cnn_bbox_valid),
+    .O_x_min        (cnn_bbox_x_min),
+    .O_x_max        (cnn_bbox_x_max),
+    .O_y_min        (cnn_bbox_y_min),
+    .O_y_max        (cnn_bbox_y_max),
+    .O_digit_valid  (cnn_digit_valid),
+    .O_digits       (cnn_digits)
+);
+
+TOP u_cnn (
+    .clk                (clk_24m),
+    .GO                 (cnn_go),
+    .RESULT             (cnn_result),
+    .we_database        (cnn_write),
+    .dp_database        (cnn_pixel),
+    .address_p_database (cnn_pixel_addr),
+    .STOP               (cnn_stop)
 );
 
 display_top u_display_top (
@@ -241,12 +422,20 @@ display_top u_display_top (
     .I_video_de     (processed_video_de),
     .I_video_user   (processed_video_user),
     .I_video_last   (processed_video_last),
-    .I_debug_status (cnn_result),
-    .I_bbox_x_min   (bbox_x_min),
-    .I_bbox_x_max   (bbox_x_max),
-    .I_bbox_y_min   (bbox_y_min),
-    .I_bbox_y_max   (bbox_y_max),
-    .I_bbox_valid   (bbox_valid),
+    .I_debug_status (ddr_debug_status),
+    .I_bbox_valid   (cnn_bbox_valid),
+    .I_bbox_x_min   (cnn_bbox_x_min),
+    .I_bbox_x_max   (cnn_bbox_x_max),
+    .I_bbox_y_min   (cnn_bbox_y_min),
+    .I_bbox_y_max   (cnn_bbox_y_max),
+    .I_bbox_digit_valid (cnn_digit_valid),
+    .I_bbox_digits      (cnn_digits),
+    .I_debug_view   (debug_view),
+    .I_debug_box    (debug_box_sync_2),
+    .I_downsample_valid      (downsample_valid && downsample_ready),
+    .I_downsample_pixel      (downsample_pixel),
+    .I_downsample_pixel_addr (downsample_pixel_addr),
+    .I_downsample_box_index  (downsample_box_index),
     .O_video_vsync  (display_video_vsync),
     .O_video_rd_en  (display_video_rd_en),
     .O_process_vsync(process_video_vsync),

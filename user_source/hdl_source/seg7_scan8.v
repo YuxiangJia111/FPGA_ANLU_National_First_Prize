@@ -7,8 +7,8 @@ module seg7_scan8 #(
 )(
     input wire I_clk,
     input wire I_rst_n,
-    input wire [15:0] I_exposure,
-    input wire [15:0] I_gain,
+    input wire [15:0] I_param_a,
+    input wire [15:0] I_param_b,
     output wire [7:0] O_DIG,
     output wire [7:0] O_SEL
 );
@@ -18,8 +18,8 @@ reg [2:0] scan_digit;
 reg [7:0] seg_on;
 reg [7:0] sel_on;
 reg [3:0] digit_value;
-wire [19:0] exposure_bcd = bin16_to_bcd(I_exposure);
-wire [19:0] gain_bcd = bin16_to_bcd(I_gain);
+    wire [19:0] param_a_bcd = bin16_to_bcd(I_param_a);
+    wire [19:0] param_b_bcd = bin16_to_bcd(I_param_b);
 
 function [19:0] bin16_to_bcd;
     input [15:0] value;
@@ -77,14 +77,14 @@ end
 
 always @(*) begin
     case (scan_digit)
-        3'd0: digit_value = exposure_bcd[15:12];
-        3'd1: digit_value = exposure_bcd[11:8];
-        3'd2: digit_value = exposure_bcd[7:4];
-        3'd3: digit_value = exposure_bcd[3:0];
-        3'd4: digit_value = gain_bcd[15:12];
-        3'd5: digit_value = gain_bcd[11:8];
-        3'd6: digit_value = gain_bcd[7:4];
-        default: digit_value = gain_bcd[3:0];
+        3'd0: digit_value = param_a_bcd[15:12];
+        3'd1: digit_value = param_a_bcd[11:8];
+        3'd2: digit_value = param_a_bcd[7:4];
+        3'd3: digit_value = param_a_bcd[3:0];
+        3'd4: digit_value = param_b_bcd[15:12];
+        3'd5: digit_value = param_b_bcd[11:8];
+        3'd6: digit_value = param_b_bcd[7:4];
+        default: digit_value = param_b_bcd[3:0];
     endcase
 
     seg_on = {1'b0, F_hex7seg(digit_value)};

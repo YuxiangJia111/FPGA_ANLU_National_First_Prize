@@ -15,11 +15,19 @@ module hdmi_mixer #(
     input wire        I_video_last,
 
     input wire[3:0]   I_debug_status,
-    input wire[11:0]  I_bbox_x_min,
-    input wire[11:0]  I_bbox_x_max,
-    input wire[11:0]  I_bbox_y_min,
-    input wire[11:0]  I_bbox_y_max,
-    input wire        I_bbox_valid,
+    input wire[7:0]   I_bbox_valid,
+    input wire[95:0]  I_bbox_x_min,
+    input wire[95:0]  I_bbox_x_max,
+    input wire[95:0]  I_bbox_y_min,
+    input wire[95:0]  I_bbox_y_max,
+    input wire[7:0]   I_bbox_digit_valid,
+    input wire[31:0]  I_bbox_digits,
+    input wire        I_debug_view,
+    input wire [2:0]  I_debug_box,
+    input wire        I_downsample_valid,
+    input wire [10:0] I_downsample_pixel,
+    input wire [9:0]  I_downsample_pixel_addr,
+    input wire [2:0]  I_downsample_box_index,
 
     output wire       O_video_rd_en,
     input wire[23:0]  I_video_rd_data,
@@ -47,6 +55,7 @@ module hdmi_mixer #(
 
     reg        S_osd_hit;
     reg [23:0] S_osd_color;
+    reg        S_bbox_hit;
     reg [11:0] S_logo_x;
     reg [11:0] S_logo_y;
     reg [3:0]  S_char_idx;
@@ -79,6 +88,13 @@ module hdmi_mixer #(
     reg [3:0]  S_cnt_d3;
     reg [3:0]  S_cnt_d4;
     reg [3:0]  S_cnt_d5;
+    reg [7:0]  S_debug_image [0:783];
+    reg [2:0]  S_debug_captured_box;
+    reg        S_debug_image_valid;
+    reg        S_debug_capture_active;
+    reg [9:0]  S_debug_expected_addr;
+    reg [9:0]  S_debug_addr;
+    reg [7:0]  S_debug_gray;
     reg [2:0]  S_lbl_row;
     reg [2:0]  S_lbl_col;
     reg [1:0]  S_lbl_idx;
@@ -102,6 +118,20 @@ module hdmi_mixer #(
     reg        S_pf_on;
     reg [9:0]  S_pf_scale_x;
     reg [9:0]  S_pf_scale_y;
+    reg [11:0] S_bbox_label_x [0:7];
+    reg [11:0] S_bbox_label_y [0:7];
+    wire [11:0] S_bbox_label_dx [0:7];
+    wire [11:0] S_bbox_label_dy [0:7];
+    wire [7:0] S_bbox_label_hit;
+    reg        S_bbox_label_selected;
+    reg [7:0]  S_bbox_label_char;
+    reg [3:0]  S_bbox_label_row;
+    reg [3:0]  S_bbox_label_col;
+    wire [15:0] S_bbox_label_bits;
+    wire       S_bbox_label_on;
+    genvar label_box;
+    integer label_i;
+    integer bbox_i;
 
     localparam LOGO_X = 12'd0;
     localparam LOGO_Y = 12'd0;
@@ -117,8 +147,6 @@ module hdmi_mixer #(
     localparam DYN_OSD_H         = 12'd24;
     localparam CN_Y_OFFSET       = 12'd2;
     localparam COLOR_DYN_TEXT    = 24'hfff200;
-    localparam COLOR_BBOX        = 24'hff0000;
-    localparam BBOX_THICKNESS    = 12'd2;
     localparam CHAR_AN           = 8'h80;
     localparam CHAR_LU           = 8'h81;
     localparam CHAR_C            = 8'h43;
@@ -126,6 +154,8 @@ module hdmi_mixer #(
     localparam CHAR_T            = 8'h54;
     localparam CHAR_0            = 8'h30;
     localparam CHAR_COLON        = 8'h3a;
+    localparam [11:0] BBOX_LABEL_MAX_X = IMG_WIDTH - 32;
+    localparam [11:0] BBOX_LABEL_MAX_Y = IMG_HEIGHT - 32;
 
     function [4:0] F_logo_text_bits;
         input [3:0] I_char;
@@ -488,6 +518,64 @@ module hdmi_mixer #(
         .O_row_bits ( S_pf_row_bits )
     );
 
+    // Inputs are already frame committed. Precompute placement every clock;
+    // keep detector source slots intact and leave the pixel pipeline unchanged.
+    generate
+        for(label_box = 0; label_box < 8; label_box = label_box + 1) begin : g_bbox_label
+            always @(posedge I_clk or negedge I_rst_n) begin
+                if(!I_rst_n) begin
+                    S_bbox_label_x[label_box] <= 12'd0;
+                    S_bbox_label_y[label_box] <= 12'd0;
+                end else begin
+                    S_bbox_label_x[label_box] <=
+                        (I_bbox_x_min[label_box*12 +: 12] > BBOX_LABEL_MAX_X) ?
+                        BBOX_LABEL_MAX_X : I_bbox_x_min[label_box*12 +: 12];
+                    if(I_bbox_y_min[label_box*12 +: 12] >= 12'd34)
+                        S_bbox_label_y[label_box] <= I_bbox_y_min[label_box*12 +: 12] - 12'd34;
+                    else
+                        S_bbox_label_y[label_box] <=
+                            (I_bbox_y_min[label_box*12 +: 12] + 12'd2 > BBOX_LABEL_MAX_Y) ?
+                            BBOX_LABEL_MAX_Y : I_bbox_y_min[label_box*12 +: 12] + 12'd2;
+                end
+            end
+
+            assign S_bbox_label_dx[label_box] = S_x_2d - S_bbox_label_x[label_box];
+            assign S_bbox_label_dy[label_box] = S_y_2d - S_bbox_label_y[label_box];
+            assign S_bbox_label_hit[label_box] = S_video_de_2d &&
+                I_bbox_valid[label_box] && I_bbox_digit_valid[label_box] &&
+                (I_bbox_digits[label_box*4 +: 4] <= 4'd9) &&
+                (S_x_2d >= S_bbox_label_x[label_box]) &&
+                (S_y_2d >= S_bbox_label_y[label_box]) &&
+                (S_bbox_label_dx[label_box] < 12'd32) &&
+                (S_bbox_label_dy[label_box] < 12'd32);
+        end
+    endgenerate
+
+    // Lowest source slot wins overlapping cells. One ROM serves all labels;
+    // dropping the low coordinate bit scales its 16x16 glyph to 32x32.
+    always @(*) begin
+        S_bbox_label_selected = 1'b0;
+        S_bbox_label_char = 8'd0;
+        S_bbox_label_row = 4'd0;
+        S_bbox_label_col = 4'd0;
+        for(label_i = 0; label_i < 8; label_i = label_i + 1) begin
+            if(S_bbox_label_hit[label_i] && !S_bbox_label_selected) begin
+                S_bbox_label_selected = 1'b1;
+                S_bbox_label_char = CHAR_0 + {4'd0, I_bbox_digits[label_i*4 +: 4]};
+                S_bbox_label_row = S_bbox_label_dy[label_i][4:1];
+                S_bbox_label_col = S_bbox_label_dx[label_i][4:1];
+            end
+        end
+    end
+
+    osd_char_lib u_bbox_digit_char_lib(
+        .I_char     ( S_bbox_label_char ),
+        .I_row      ( S_bbox_label_row  ),
+        .O_row_bits ( S_bbox_label_bits )
+    );
+    assign S_bbox_label_on = S_bbox_label_selected &&
+                            S_bbox_label_bits[4'd15 - S_bbox_label_col];
+
     always @(posedge I_clk or negedge I_rst_n) begin
         if(!I_rst_n) begin
             S_x <= 12'd0;
@@ -504,6 +592,48 @@ module hdmi_mixer #(
             end
             else begin
                 S_x <= S_x + 12'd1;
+            end
+        end
+    end
+
+    // Cache the selected result for visual inspection. The memory contents do
+    // not need reset because they are hidden until all 784 pixels arrive.
+    always @(posedge I_clk or negedge I_rst_n) begin
+        if(!I_rst_n) begin
+            S_debug_captured_box <= 3'd0;
+            S_debug_image_valid  <= 1'b0;
+            S_debug_capture_active <= 1'b0;
+            S_debug_expected_addr <= 10'd0;
+        end else begin
+            if(I_debug_box != S_debug_captured_box) begin
+                S_debug_captured_box <= I_debug_box;
+                S_debug_image_valid <= 1'b0;
+                S_debug_capture_active <= 1'b0;
+                S_debug_expected_addr <= 10'd0;
+            end
+
+            if(I_downsample_valid && (I_downsample_box_index == I_debug_box)) begin
+                if(I_downsample_pixel_addr == 10'd0) begin
+                    S_debug_image[10'd0] <= I_downsample_pixel[10:2];
+                    S_debug_image_valid  <= 1'b0;
+                    S_debug_capture_active <= 1'b1;
+                    S_debug_expected_addr <= 10'd1;
+                end else if((I_debug_box == S_debug_captured_box) &&
+                            S_debug_capture_active &&
+                            (I_downsample_pixel_addr == S_debug_expected_addr)) begin
+                    S_debug_image[I_downsample_pixel_addr] <= I_downsample_pixel[10:2];
+                    if(I_downsample_pixel_addr == 10'd783) begin
+                        S_debug_image_valid <= 1'b1;
+                        S_debug_capture_active <= 1'b0;
+                        S_debug_expected_addr <= 10'd0;
+                    end else begin
+                        S_debug_expected_addr <= S_debug_expected_addr + 10'd1;
+                    end
+                end else if((I_debug_box == S_debug_captured_box) &&
+                            S_debug_capture_active) begin
+                    S_debug_capture_active <= 1'b0;
+                    S_debug_expected_addr <= 10'd0;
+                end
             end
         end
     end
@@ -571,6 +701,8 @@ module hdmi_mixer #(
         S_osd_hit   = 1'b0;
         S_osd_color = 24'd0;
         S_logo_addr = 15'd0;
+        S_debug_addr = 10'd0;
+        S_debug_gray = 8'd255;
 
         S_logo_x = 12'd0;
         S_logo_y = 12'd0;
@@ -617,13 +749,14 @@ module hdmi_mixer #(
         S_pf_on = 1'b0;
         S_pf_scale_x = 10'd0;
         S_pf_scale_y = 10'd0;
+        S_bbox_hit = 1'b0;
 
         if(S_video_de_2d) begin
             if((S_x_2d >= LOGO_X) && (S_x_2d < (LOGO_X + LOGO_W)) &&
                (S_y_2d >= LOGO_Y) && (S_y_2d < (LOGO_Y + LOGO_H))) begin
                 S_logo_x = S_x_2d - LOGO_X;
                 S_logo_y = S_y_2d - LOGO_Y;
-                S_logo_addr = S_logo_y * LOGO_W + S_logo_x;
+                S_logo_addr = (S_logo_y << 7) + (S_logo_y << 5) + S_logo_x;
                 if(S_logo_pixel[24]) begin
                     S_osd_hit   = 1'b1;
                     S_osd_color = S_logo_pixel[23:0];
@@ -637,7 +770,7 @@ module hdmi_mixer #(
                 S_dyn_y = S_y_2d - DYN_OSD_Y;
 
                 // Unified prefix render using one character library.
-                // an:[0..23], lu:[24..47], C:[52..67], N:[68..83], N:[84..99], :[100..107]
+                // an:[0..23], lu:[24..47], C:[52..67], N:[68..83], T:[84..99], :[100..107]
                 if((S_dyn_x < 12'd108) && (S_dyn_y < 12'd24)) begin
                     if((S_dyn_x < 12'd24) || ((S_dyn_x >= 12'd24) && (S_dyn_x < 12'd48))) begin
                         if(S_dyn_y >= CN_Y_OFFSET)
@@ -690,7 +823,7 @@ module hdmi_mixer #(
                             S_pf_local_x = S_dyn_x - 12'd68;
                         end
                         else begin
-                            S_pf_char = CHAR_N;
+                            S_pf_char = CHAR_T;
                             S_pf_local_x = S_dyn_x - 12'd84;
                         end
                         S_pf_local_y = S_dyn_y - 12'd4;
@@ -748,38 +881,37 @@ module hdmi_mixer #(
                         S_dyn_on = 1'b1;
                 end
 
-                // Show the CNN class as a zero-padded decimal value.
+                // Decimal 6 digits starts at x=110. Each digit is 15x24.
                 if((S_dyn_x >= 12'd110) && (S_dyn_x < 12'd200)) begin
                     if(S_dyn_x < 12'd125) begin
                         S_dyn_digit_idx = 4'd0;
                         S_dyn_digit_x = S_dyn_x - 12'd110;
-                        S_dyn_dec_digit = 4'd0;
+                        S_dyn_dec_digit = S_cnt_d5;
                     end
                     else if(S_dyn_x < 12'd140) begin
                         S_dyn_digit_idx = 4'd1;
                         S_dyn_digit_x = S_dyn_x - 12'd125;
-                        S_dyn_dec_digit = 4'd0;
+                        S_dyn_dec_digit = S_cnt_d4;
                     end
                     else if(S_dyn_x < 12'd155) begin
                         S_dyn_digit_idx = 4'd2;
                         S_dyn_digit_x = S_dyn_x - 12'd140;
-                        S_dyn_dec_digit = 4'd0;
+                        S_dyn_dec_digit = S_cnt_d3;
                     end
                     else if(S_dyn_x < 12'd170) begin
                         S_dyn_digit_idx = 4'd3;
                         S_dyn_digit_x = S_dyn_x - 12'd155;
-                        S_dyn_dec_digit = 4'd0;
+                        S_dyn_dec_digit = S_cnt_d2;
                     end
                     else if(S_dyn_x < 12'd185) begin
                         S_dyn_digit_idx = 4'd4;
                         S_dyn_digit_x = S_dyn_x - 12'd170;
-                        S_dyn_dec_digit = (I_debug_status >= 4'd10) ? 4'd1 : 4'd0;
+                        S_dyn_dec_digit = S_cnt_d1;
                     end
                     else begin
                         S_dyn_digit_idx = 4'd5;
                         S_dyn_digit_x = S_dyn_x - 12'd185;
-                        S_dyn_dec_digit = (I_debug_status >= 4'd10) ?
-                                          (I_debug_status - 4'd10) : I_debug_status;
+                        S_dyn_dec_digit = S_cnt_d0;
                     end
 
                     // Render decimal digits through unified 16x16 character library.
@@ -822,16 +954,50 @@ module hdmi_mixer #(
                 end
             end
 
-            // The detection box is the highest-priority overlay.
-            if(I_bbox_valid &&
-               (S_x_2d >= I_bbox_x_min) && (S_x_2d <= I_bbox_x_max) &&
-               (S_y_2d >= I_bbox_y_min) && (S_y_2d <= I_bbox_y_max) &&
-               (((S_y_2d - I_bbox_y_min) < BBOX_THICKNESS) ||
-                ((I_bbox_y_max - S_y_2d) < BBOX_THICKNESS) ||
-                ((S_x_2d - I_bbox_x_min) < BBOX_THICKNESS) ||
-                ((I_bbox_x_max - S_x_2d) < BBOX_THICKNESS))) begin
-                S_osd_hit   = 1'b1;
-                S_osd_color = COLOR_BBOX;
+            // Bounding box borders override the logo and counter.
+            for(bbox_i = 0; bbox_i < 8; bbox_i = bbox_i + 1) begin
+                if(I_bbox_valid[bbox_i] &&
+                   (S_x_2d >= I_bbox_x_min[bbox_i*12 +: 12]) &&
+                   (S_x_2d <= I_bbox_x_max[bbox_i*12 +: 12]) &&
+                   (S_y_2d >= I_bbox_y_min[bbox_i*12 +: 12]) &&
+                   (S_y_2d <= I_bbox_y_max[bbox_i*12 +: 12]) &&
+                   ((S_x_2d <= I_bbox_x_min[bbox_i*12 +: 12] + 12'd1) ||
+                    (S_x_2d >= I_bbox_x_max[bbox_i*12 +: 12] - 12'd1) ||
+                    (S_y_2d <= I_bbox_y_min[bbox_i*12 +: 12] + 12'd1) ||
+                    (S_y_2d >= I_bbox_y_max[bbox_i*12 +: 12] - 12'd1))) begin
+                    S_bbox_hit = 1'b1;
+                end
+            end
+            if(S_bbox_hit) begin
+                S_osd_hit = 1'b1;
+                S_osd_color = 24'hff0000;
+            end
+
+            if(S_bbox_label_on) begin
+                S_osd_hit = 1'b1;
+                S_osd_color = COLOR_DYN_TEXT;
+            end
+
+            // Display the selected 28x28 result at 16x scale. The green frame
+            // marks a complete image; dark blue means that box is not ready.
+            if(I_debug_view &&
+               (S_x_2d >= 12'd416) && (S_x_2d < 12'd864) &&
+               (S_y_2d >= 12'd136) && (S_y_2d < 12'd584)) begin
+                S_debug_addr = ((((S_y_2d - 12'd136) >> 4) << 5) -
+                                (((S_y_2d - 12'd136) >> 4) << 2)) +
+                               ((S_x_2d - 12'd416) >> 4);
+                if(S_debug_image_valid)
+                    S_debug_gray = S_debug_image[S_debug_addr];
+                else
+                    S_debug_gray = 8'h20;
+                S_osd_hit = 1'b1;
+                if((S_x_2d == 12'd416) || (S_x_2d == 12'd863) ||
+                   (S_y_2d == 12'd136) || (S_y_2d == 12'd583))
+                    S_osd_color = S_debug_image_valid ? 24'h00ff00 : 24'hff0000;
+                else if(S_debug_image_valid)
+                    S_osd_color = {3{S_debug_gray}};
+                else
+                    S_osd_color = 24'h102040;
             end
         end
     end
