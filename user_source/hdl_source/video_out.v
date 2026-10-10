@@ -8,6 +8,13 @@ module video_out (
     output wire       O_video_out_rd_busy,  
     input wire        I_video_in_wr_busy,   
     input wire[1:0]   I_video_out_rp,
+    input wire[15:0]  I_capture_frame_id,
+    input wire[15:0]  I_frame_id_0,
+    input wire[15:0]  I_frame_id_1,
+    input wire[15:0]  I_frame_id_2,
+    input wire[15:0]  I_frame_id_3,
+    input wire[3:0]   I_frame_id_valid,
+    output reg[7:0]   O_latency_frames,
     output wire       O_ddr_user_rd_en,
     output reg[24:0]  O_ddr_user_addr,
     input wire        I_ddr_user_ready,
@@ -37,6 +44,9 @@ module video_out (
     reg[3:0]    S_fifo_rd_cnt_1d;     
     reg[127:0]  S_fifo_rd_data_1d;    
 	wire        S_fifo_emtpy;     
+    reg[15:0]   S_selected_frame_id;
+    reg         S_selected_frame_valid;
+    wire[15:0]  S_frame_age;
 
 
 
@@ -53,6 +63,42 @@ module video_out (
     end
 
     assign S_video_frame_start = ~S_video_vsync_3d & S_video_vsync_2d;
+
+    always @(*) begin
+        case(I_video_out_rp)
+            2'd0: begin
+                S_selected_frame_id = I_frame_id_0;
+                S_selected_frame_valid = I_frame_id_valid[0];
+            end
+            2'd1: begin
+                S_selected_frame_id = I_frame_id_1;
+                S_selected_frame_valid = I_frame_id_valid[1];
+            end
+            2'd2: begin
+                S_selected_frame_id = I_frame_id_2;
+                S_selected_frame_valid = I_frame_id_valid[2];
+            end
+            default: begin
+                S_selected_frame_id = I_frame_id_3;
+                S_selected_frame_valid = I_frame_id_valid[3];
+            end
+        endcase
+    end
+
+    assign S_frame_age = I_capture_frame_id - S_selected_frame_id;
+
+    always @(posedge I_ddr_clk or negedge I_rst_n) begin
+        if(!I_rst_n)
+            O_latency_frames <= 8'd0;
+        else if(S_video_frame_start) begin
+            if(!S_selected_frame_valid)
+                O_latency_frames <= 8'd0;
+            else if(|S_frame_age[15:8])
+                O_latency_frames <= 8'hff;
+            else
+                O_latency_frames <= S_frame_age[7:0];
+        end
+    end
 
 
     always @(posedge I_ddr_clk or negedge I_rst_n) begin

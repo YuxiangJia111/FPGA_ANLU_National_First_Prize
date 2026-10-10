@@ -28,6 +28,7 @@ module TOP (
     parameter razmpar2 = picture_size >> 2;
     parameter picture_storage_limit_2 = ((picture_size * picture_size) * 4) >> (num_conv >> 1);
     parameter convolution_size = 9;
+    localparam [3:0] CLASS_COUNT = 4'd11;
     input clk;
     input GO;
     output [3:0] RESULT;
@@ -293,7 +294,7 @@ module TOP (
         nozero_dense,
         in_dense
     );
-    result #(SIZE_1, SIZE_2, SIZE_3, SIZE_4, SIZE_address_pix) result (
+    result #(SIZE_1, SIZE_2, SIZE_3, SIZE_4, SIZE_address_pix, CLASS_COUNT) result (
         clk,
         result_en,
         STOP_res,
@@ -428,7 +429,7 @@ module TOP (
                 globmaxp_en = 0;
                 nextstep    = 1;
                 in_dense    = 16;
-                out_dense   = 11;
+                out_dense   = CLASS_COUNT;
             end
             if ((TOPlvl == 10) && (STOP_dense == 0) && (step == 15)) begin
                 memstartp    = picture_storage_limit;

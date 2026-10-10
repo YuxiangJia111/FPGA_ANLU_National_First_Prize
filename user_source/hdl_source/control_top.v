@@ -15,6 +15,9 @@ module control_top (
     localparam [2:0] MODE_ORIGINAL = 3'b000;
     localparam [2:0] MODE_GRAY     = 3'b001;
     localparam [2:0] MODE_BINARY   = 3'b010;
+    localparam [2:0] MODE_SOBEL    = 3'b011;
+    localparam [2:0] MODE_AUTO_EXP = 3'b100;
+    localparam [2:0] MODE_EQUALIZE = 3'b101;
     localparam [2:0] MODE_DOWNSAMPLE = 3'b110;
 
     wire [3:0] key_event;
@@ -87,15 +90,21 @@ module control_top (
             if(key_event[3]) begin
             case(selected_mode)
                 MODE_GRAY:   selected_mode <= MODE_BINARY;
-                MODE_BINARY: selected_mode <= MODE_DOWNSAMPLE;
+                MODE_BINARY: selected_mode <= MODE_SOBEL;
+                MODE_SOBEL: selected_mode <= MODE_AUTO_EXP;
+                MODE_AUTO_EXP: selected_mode <= MODE_EQUALIZE;
+                MODE_EQUALIZE: selected_mode <= MODE_DOWNSAMPLE;
                 MODE_DOWNSAMPLE: selected_mode <= MODE_GRAY;
                 default:     selected_mode <= MODE_GRAY;
             endcase
             end else if(key_event[2]) begin
             case(selected_mode)
                 MODE_GRAY:   selected_mode <= MODE_DOWNSAMPLE;
+                MODE_DOWNSAMPLE: selected_mode <= MODE_EQUALIZE;
+                MODE_EQUALIZE: selected_mode <= MODE_AUTO_EXP;
+                MODE_AUTO_EXP: selected_mode <= MODE_SOBEL;
+                MODE_SOBEL: selected_mode <= MODE_BINARY;
                 MODE_BINARY: selected_mode <= MODE_GRAY;
-                MODE_DOWNSAMPLE: selected_mode <= MODE_BINARY;
                 default:     selected_mode <= MODE_GRAY;
             endcase
             end

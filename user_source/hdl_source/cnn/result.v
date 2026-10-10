@@ -15,6 +15,9 @@ module result (
     parameter SIZE_3 = 0;
     parameter SIZE_4 = 0;
     parameter SIZE_address_pix = 0;
+    parameter CLASS_COUNT = 11;
+
+    localparam [3:0] LAST_MARKER = CLASS_COUNT + 1;
 
     input clk, enable;
     output reg STOP;
@@ -31,15 +34,15 @@ module result (
     always @(posedge clk) begin
         if (enable == 1) begin
             re = 1;
-            if (marker <= 12) read_addressp = memstartp + marker;
+            if (marker <= LAST_MARKER) read_addressp = memstartp + marker;
 
             if (marker == 1) buff = 0;
-            else if ((marker >= 2) && (marker <= 12) && (p1 >= buff)) begin
+            else if ((marker >= 2) && (marker <= LAST_MARKER) && (p1 >= buff)) begin
                 buff   = p1;
                 RESULT = marker - 2;
             end
 
-            if (marker == 12) STOP = 1;
+            if (marker == LAST_MARKER) STOP = 1;
             else marker = marker + 1;
         end else begin
             re     = 0;

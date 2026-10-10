@@ -40,6 +40,12 @@ module bbox_gray_downsampler #(
     localparam integer COL_SAMPLES = ((ROI_X_MAX - ROI_X_MIN) / SAMPLE_STEP) + 1;
     localparam integer ROW_SAMPLES = ((ROI_Y_MAX - ROI_Y_MIN) / SAMPLE_STEP) + 1;
     localparam integer PIXELS_PER_BOX = OUTPUT_SIZE * OUTPUT_SIZE;
+    localparam integer MAP_DENOM = 2 * OUTPUT_SIZE;
+    localparam integer MAP_REM_W = (MAP_DENOM <= 2) ? 1 : $clog2(MAP_DENOM);
+    localparam integer MAX_MAP_SIDE = (COL_SAMPLES < ROW_SAMPLES) ? COL_SAMPLES : ROW_SAMPLES;
+    localparam integer MAX_MAP_QUOTIENT =
+        ((2 * MAX_MAP_SIDE) + MAP_DENOM - 1) / MAP_DENOM;
+    localparam integer MAP_DIV_W = (COL_W + 1) + MAP_REM_W;
     localparam integer BOX_INDEX_W = (MAX_BOXES <= 2) ? 1 : $clog2(MAX_BOXES);
     localparam integer COL_W = (COL_SAMPLES <= 2) ? 1 : $clog2(COL_SAMPLES);
     localparam integer ROW_W = (ROW_SAMPLES <= 2) ? 1 : $clog2(ROW_SAMPLES);
@@ -56,6 +62,27 @@ module bbox_gray_downsampler #(
     localparam [3:0] ST_PREP_GEOMETRY = 4'd9;
     localparam [3:0] ST_PREP_ORIGIN   = 4'd10;
 
+    // Constant-denominator quotient/remainder without a divider or reciprocal
+    // multiplier. The loop bounds are parameters, so synthesis unrolls only
+    // comparisons and constant subtracts.
+    function [MAP_DIV_W-1:0] F_map_div;
+        input [COL_W+2:0] numerator;
+        integer k;
+        reg [COL_W:0] quotient;
+        reg [COL_W+2:0] remainder;
+        begin
+            quotient = 0;
+            remainder = numerator;
+            for(k = 0; k <= MAX_MAP_QUOTIENT; k = k + 1) begin
+                if(numerator >= (k * MAP_DENOM)) begin
+                    quotient = k;
+                    remainder = numerator - (k * MAP_DENOM);
+                end
+            end
+            F_map_div = {quotient, remainder[MAP_REM_W-1:0]};
+        end
+    endfunction
+
     reg [3:0] state;
     reg [BOX_INDEX_W-1:0] sort_pass;
     reg [BOX_INDEX_W-1:0] sort_index;
@@ -63,6 +90,7 @@ module bbox_gray_downsampler #(
     reg [BOX_INDEX_W:0] count_index;
     reg [BOX_INDEX_W:0] box_count;
     reg [9:0] crop_pixel_addr;
+    reg [4:0] crop_x_pos;
     reg crop_bank;
     reg [2:0] source_slot [0:MAX_BOXES-1];
     reg box_valid [0:MAX_BOXES-1];
@@ -80,6 +108,12 @@ module bbox_gray_downsampler #(
     reg [COL_W:0] prep_side;
     reg [COL_W-1:0] prep_center_x;
     reg [ROW_W-1:0] prep_center_y;
+    reg [COL_W:0] map_start_value;
+    reg [MAP_REM_W-1:0] map_start_remainder;
+    reg [COL_W:0] map_x_value;
+    reg [ROW_W:0] map_y_value;
+    reg [MAP_REM_W-1:0] map_x_remainder;
+    reg [MAP_REM_W-1:0] map_y_remainder;
 
     reg [7:0] result_write_data;
     reg [12:0] result_write_addr;
@@ -99,10 +133,8 @@ module bbox_gray_downsampler #(
     integer center_y;
     integer crop_x;
     integer crop_y;
-    integer sample_x;
-    integer sample_y;
-    integer pixel_x;
-    integer pixel_y;
+    reg [COL_W-1:0] sample_x;
+    reg [ROW_W-1:0] sample_y;
     integer swap_valid;
     integer swap_x_min;
     integer swap_x_max;
@@ -112,6 +144,24 @@ module bbox_gray_downsampler #(
 
     wire [7:0] gray4_to_result = {I_gray_read_data, I_gray_read_data};
     wire [12:0] crop_result_addr = (box_index * PIXELS_PER_BOX) + crop_pixel_addr;
+    wire [COL_W+2:0] map_step_sum =
+        ((crop_x_pos == OUTPUT_SIZE - 1) ? map_y_remainder : map_x_remainder) +
+        (square_side[box_index] << 1);
+    wire [MAP_DIV_W-1:0] map_step_div = F_map_div(map_step_sum);
+    wire [MAP_DIV_W-1:0] map_initial_div =
+        F_map_div({{2{1'b0}}, prep_side});
+    wire [COL_W:0] map_step_delta = map_step_div[MAP_DIV_W-1:MAP_REM_W];
+    wire [MAP_REM_W-1:0] map_step_remainder = map_step_div[MAP_REM_W-1:0];
+    wire [COL_W:0] map_initial_value =
+        map_initial_div[MAP_DIV_W-1:MAP_REM_W];
+    wire [MAP_REM_W-1:0] map_initial_remainder =
+        map_initial_div[MAP_REM_W-1:0];
+    wire [15:0] sample_y_extended = {{(16-ROW_W){1'b0}}, sample_y};
+    wire [15:0] sample_x_extended = {{(16-COL_W){1'b0}}, sample_x};
+    wire [15:0] sample_row_base = (sample_y_extended << 8) +
+                                         (sample_y_extended << 4) +
+                                         (sample_y_extended << 1) +
+                                          sample_y_extended;
     assign O_crop_busy = ((state >= ST_SORT) && (state <= ST_CROP_WAIT)) ||
                          (state == ST_PREP_GEOMETRY) || (state == ST_PREP_ORIGIN);
 
@@ -130,21 +180,13 @@ module bbox_gray_downsampler #(
         result_write_enable = (state == ST_CROP_WAIT);
         result_write_addr = crop_result_addr;
         result_write_data = gray4_to_result;
-        pixel_x = 0;
-        pixel_y = 0;
         sample_x = 0;
         sample_y = 0;
 
         if ((state == ST_CROP_REQ) && (box_index < box_count)) begin
-            pixel_x = crop_pixel_addr % OUTPUT_SIZE;
-            pixel_y = crop_pixel_addr / OUTPUT_SIZE;
-            sample_x = square_x_min[box_index] +
-                       (((2 * pixel_x + 1) * square_side[box_index]) /
-                        (2 * OUTPUT_SIZE));
-            sample_y = square_y_min[box_index] +
-                       (((2 * pixel_y + 1) * square_side[box_index]) /
-                        (2 * OUTPUT_SIZE));
-            O_gray_read_addr = (sample_y * COL_SAMPLES) + sample_x;
+            sample_x = square_x_min[box_index] + map_x_value;
+            sample_y = square_y_min[box_index] + map_y_value;
+            O_gray_read_addr = sample_row_base + sample_x_extended;
         end else begin
             O_gray_read_addr = 16'd0;
         end
@@ -160,6 +202,7 @@ module bbox_gray_downsampler #(
             count_index    <= {(BOX_INDEX_W+1){1'b0}};
             box_count      <= {(BOX_INDEX_W+1){1'b0}};
             crop_pixel_addr <= 10'd0;
+            crop_x_pos      <= 5'd0;
             crop_bank      <= 1'b0;
             prep_x_min     <= 0;
             prep_x_max     <= 0;
@@ -168,6 +211,12 @@ module bbox_gray_downsampler #(
             prep_side      <= 1;
             prep_center_x  <= 0;
             prep_center_y  <= 0;
+            map_start_value <= 0;
+            map_start_remainder <= 0;
+            map_x_value <= 0;
+            map_y_value <= 0;
+            map_x_remainder <= 0;
+            map_y_remainder <= 0;
             O_valid        <= 1'b0;
             O_pixel        <= 11'd0;
             O_pixel_addr   <= 10'd0;
@@ -326,6 +375,13 @@ module bbox_gray_downsampler #(
                     square_y_min[box_index] <= crop_y;
                     square_side[box_index] <= side_samples;
                     crop_pixel_addr <= 10'd0;
+                    crop_x_pos <= 5'd0;
+                    map_start_value <= map_initial_value;
+                    map_start_remainder <= map_initial_remainder;
+                    map_x_value <= map_initial_value;
+                    map_y_value <= map_initial_value;
+                    map_x_remainder <= map_initial_remainder;
+                    map_y_remainder <= map_initial_remainder;
                     state <= ST_CROP_REQ;
                 end
 
@@ -343,6 +399,17 @@ module bbox_gray_downsampler #(
                         end
                     end else begin
                         crop_pixel_addr <= crop_pixel_addr + 1'b1;
+                        if (crop_x_pos == OUTPUT_SIZE - 1) begin
+                            crop_x_pos <= 5'd0;
+                            map_x_value <= map_start_value;
+                            map_x_remainder <= map_start_remainder;
+                            map_y_value <= map_y_value + map_step_delta;
+                            map_y_remainder <= map_step_remainder;
+                        end else begin
+                            crop_x_pos <= crop_x_pos + 1'b1;
+                            map_x_value <= map_x_value + map_step_delta;
+                            map_x_remainder <= map_step_remainder;
+                        end
                         state <= ST_CROP_REQ;
                     end
                 end

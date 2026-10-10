@@ -4,6 +4,7 @@ module DDR_top (
     input  wire         I_sys_clk,
     input  wire         I_rst_n,
     input  wire         I_camera_clk,
+    input  wire         I_camera_fifo_flush,
     input  wire         I_camera_frame_start,
     input  wire         I_camera_valid,
     input  wire [127:0] I_camera_data,
@@ -12,6 +13,7 @@ module DDR_top (
     input  wire         I_display_vsync,
     input  wire         I_display_rd_en,
     output wire [23:0]  O_display_data,
+    output wire [7:0]   O_latency_frames,
     output wire [3:0]   O_debug_status,
     output wire         O_init_calib_complete,
 
@@ -59,6 +61,12 @@ wire mc_app_rd_data_end;
 wire mc_app_rd_data_valid;
 wire mc_app_rdy;
 wire mc_app_wdf_rdy;
+wire [15:0] capture_frame_id;
+wire [15:0] frame_id_0;
+wire [15:0] frame_id_1;
+wire [15:0] frame_id_2;
+wire [15:0] frame_id_3;
+wire [3:0] frame_id_valid;
 
 assign ddr_user_wr_en = vi_ddr_wr_en;
 assign ddr_user_rd_en = vo_ddr_rd_en;
@@ -75,6 +83,7 @@ assign O_debug_status = {
 video_in u_video_in (
     .I_rst_n              (I_rst_n),
     .I_camera_clk         (I_camera_clk),
+    .I_camera_fifo_flush  (I_camera_fifo_flush),
     .I_camera_frame_start (I_camera_frame_start),
     .I_camera_valid       (I_camera_valid),
     .I_camera_data        (I_camera_data),
@@ -84,6 +93,12 @@ video_in u_video_in (
     .I_video_out_rd_busy  (video_out_rd_busy),
     .O_video_in_wr_busy   (video_in_wr_busy),
     .O_video_out_rp       (video_out_rp),
+    .O_capture_frame_id   (capture_frame_id),
+    .O_frame_id_0         (frame_id_0),
+    .O_frame_id_1         (frame_id_1),
+    .O_frame_id_2         (frame_id_2),
+    .O_frame_id_3         (frame_id_3),
+    .O_frame_id_valid     (frame_id_valid),
     .O_ddr_user_wr_en     (vi_ddr_wr_en),
     .O_ddr_user_addr      (vi_ddr_wr_addr),
     .O_ddr_user_wr_data   (vi_ddr_wr_data),
@@ -96,6 +111,13 @@ video_out u_video_out (
     .O_video_out_rd_busy (video_out_rd_busy),
     .I_video_in_wr_busy  (video_in_wr_busy),
     .I_video_out_rp      (video_out_rp),
+    .I_capture_frame_id  (capture_frame_id),
+    .I_frame_id_0        (frame_id_0),
+    .I_frame_id_1        (frame_id_1),
+    .I_frame_id_2        (frame_id_2),
+    .I_frame_id_3        (frame_id_3),
+    .I_frame_id_valid    (frame_id_valid),
+    .O_latency_frames    (O_latency_frames),
     .O_ddr_user_rd_en    (vo_ddr_rd_en),
     .O_ddr_user_addr     (vo_ddr_rd_addr),
     .I_ddr_user_ready    (ddr_user_ready),

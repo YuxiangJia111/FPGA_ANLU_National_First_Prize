@@ -1,4 +1,6 @@
-module isp_top (
+module isp_top #(
+    parameter integer ENABLE_AWB = 1
+) (
     input 			axi4s_video_aclk,
     input 			I_rst_n			,
     input 			I_tlast			,
@@ -74,23 +76,36 @@ data128_96 u_data128_96 (
     .O_tdata(m_aixs_tdata_96)
 );
 
-awb #(
-    .IMG_HEIGHT(720 ),
-    .IMG_WIDTH (1280)
-) u_awb (
-    .I_clk   (axi4s_video_aclk),
-    .I_rst_n (I_rst_n),
-    .I_tlast (m_aixs_tlast),
-    .I_tuser (m_aixs_tuser),
-    .I_tdata (m_aixs_tdata_96),
-    .I_tvalid(m_aixs_tvalid),
-    .I_tready(m_aixs_tready),
-    .O_tlast (awb_O_tlast ),
-    .O_tuser (awb_O_tuser ),
-    .O_tdata (awb_O_tdata ),
-    .O_tvalid(awb_O_tvalid),
-    .O_tready(awb_O_tready)
-);
+generate
+    if(ENABLE_AWB != 0) begin : g_awb_enabled
+        awb #(
+            .IMG_HEIGHT(720 ),
+            .IMG_WIDTH (1280)
+        ) u_awb (
+            .I_clk   (axi4s_video_aclk),
+            .I_rst_n (I_rst_n),
+            .I_tlast (m_aixs_tlast),
+            .I_tuser (m_aixs_tuser),
+            .I_tdata (m_aixs_tdata_96),
+            .I_tvalid(m_aixs_tvalid),
+            .I_tready(m_aixs_tready),
+            .O_tlast (awb_O_tlast ),
+            .O_tuser (awb_O_tuser ),
+            .O_tdata (awb_O_tdata ),
+            .O_tvalid(awb_O_tvalid),
+            .O_tready(awb_O_tready)
+        );
+    end else begin : g_awb_bypass
+        // Keep the 128 -> 96 -> 128 packing path intact.  A direct demosaic
+        // bypass is not equivalent because each 32-bit input pixel contains
+        // padding that data128_96 removes before the RGB888 stream is packed.
+        assign m_aixs_tready = awb_O_tready;
+        assign awb_O_tlast   = m_aixs_tlast;
+        assign awb_O_tuser   = m_aixs_tuser;
+        assign awb_O_tdata   = m_aixs_tdata_96;
+        assign awb_O_tvalid  = m_aixs_tvalid;
+    end
+endgenerate
 
     data_96bit_to_128bit u_data_96bit_to_128bit(
         .I_clk              ( axi4s_video_aclk  ),

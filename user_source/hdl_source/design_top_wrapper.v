@@ -236,6 +236,7 @@ DDR_top u_DDR_top (
     .I_sys_clk             (I_sys_clk),
     .I_rst_n               (system_rst_n),
     .I_camera_clk          (camera_video_clk),
+    .I_camera_fifo_flush   (camera_tuser),
     .I_camera_frame_start  (isp_tuser),
     .I_camera_valid        (isp_tvalid),
     .I_camera_data         (isp_tdata),

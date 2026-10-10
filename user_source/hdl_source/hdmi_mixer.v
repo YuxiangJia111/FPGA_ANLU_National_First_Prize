@@ -3,7 +3,9 @@ module hdmi_mixer #(
     parameter V_OFFSET = 60,
     parameter IMG_WIDTH = 1280,
     parameter IMG_HEIGHT = 720,
-    parameter integer DEBUG_MODE = 0
+    parameter integer DEBUG_MODE = 0,
+    parameter integer ENABLE_LOGO = 1,
+    parameter integer ENABLE_DEBUG_PREVIEW = 1
 )(
     input wire        I_clk,
     input wire        I_rst_n,
@@ -69,7 +71,8 @@ module hdmi_mixer #(
     reg [3:0]  S_logo_red_band;
     reg [11:0] S_logo_red_x_start;
     reg [11:0] S_logo_red_x_end;
-    reg [14:0] S_logo_addr;
+    wire[13:0] S_logo_rom_addr;
+    wire       S_logo_rom_active;
     wire[24:0] S_logo_pixel;
     reg [31:0] S_frame_cnt;
     reg [11:0] S_dyn_x;
@@ -88,12 +91,14 @@ module hdmi_mixer #(
     reg [3:0]  S_cnt_d3;
     reg [3:0]  S_cnt_d4;
     reg [3:0]  S_cnt_d5;
-    reg [7:0]  S_debug_image [0:783];
+    reg [7:0]  S_debug_image [0:783]; // synthesis ram_style=block
     reg [2:0]  S_debug_captured_box;
     reg        S_debug_image_valid;
     reg        S_debug_capture_active;
     reg [9:0]  S_debug_expected_addr;
-    reg [9:0]  S_debug_addr;
+    wire [9:0] S_debug_read_addr;
+    wire       S_debug_read_active;
+    wire       S_debug_write;
     reg [7:0]  S_debug_gray;
     reg [2:0]  S_lbl_row;
     reg [2:0]  S_lbl_col;
@@ -507,10 +512,47 @@ module hdmi_mixer #(
 
     assign O_video_rd_en = I_video_de;
 
-    anlogic_logo_rom u_anlogic_logo_rom(
-        .I_addr  ( S_logo_addr  ),
-        .O_pixel ( S_logo_pixel )
-    );
+    // The preview memory is read one cycle before the OSD stage.  Its output
+    // therefore stays aligned with S_x_2d/S_y_2d while allowing block-RAM
+    // inference instead of a 784-way asynchronous register-array mux.
+    assign S_debug_read_active =
+        (S_x_1d >= 12'd416) && (S_x_1d < 12'd864) &&
+        (S_y_1d >= 12'd136) && (S_y_1d < 12'd584);
+    assign S_debug_read_addr = S_debug_read_active ?
+        (((((S_y_1d - 12'd136) >> 4) << 5) -
+          (((S_y_1d - 12'd136) >> 4) << 2)) +
+         ((S_x_1d - 12'd416) >> 4)) : 10'd0;
+
+    assign S_debug_write = (ENABLE_DEBUG_PREVIEW != 0) &&
+        I_downsample_valid && (I_downsample_box_index == I_debug_box) &&
+        ((I_downsample_pixel_addr == 10'd0) ||
+         ((I_debug_box == S_debug_captured_box) &&
+          S_debug_capture_active &&
+          (I_downsample_pixel_addr == S_debug_expected_addr)));
+
+    // The bitmap only occupies x=7..152, y=34..127 inside the original
+    // 160x160 canvas. Address it from the preceding coordinate stage so the
+    // synchronous index ROM output remains aligned with S_x_2d/S_y_2d.
+    assign S_logo_rom_active =
+        (S_x_1d >= 12'd7) && (S_x_1d <= 12'd152) &&
+        (S_y_1d >= 12'd34) && (S_y_1d <= 12'd127);
+    assign S_logo_rom_addr = S_logo_rom_active ?
+        (((S_y_1d - 12'd34) << 7) +
+         ((S_y_1d - 12'd34) << 4) +
+         ((S_y_1d - 12'd34) << 1) +
+         (S_x_1d - 12'd7)) : 14'd0;
+
+    generate
+        if(ENABLE_LOGO != 0) begin : g_logo_enabled
+            anlogic_logo_rom u_anlogic_logo_rom(
+                .I_clk   ( I_clk            ),
+                .I_addr  ( S_logo_rom_addr  ),
+                .O_pixel ( S_logo_pixel )
+            );
+        end else begin : g_logo_disabled
+            assign S_logo_pixel = 25'd0;
+        end
+    endgenerate
 
     osd_char_lib u_osd_char_lib(
         .I_char     ( S_pf_char     ),
@@ -604,7 +646,7 @@ module hdmi_mixer #(
             S_debug_image_valid  <= 1'b0;
             S_debug_capture_active <= 1'b0;
             S_debug_expected_addr <= 10'd0;
-        end else begin
+        end else if(ENABLE_DEBUG_PREVIEW != 0) begin
             if(I_debug_box != S_debug_captured_box) begin
                 S_debug_captured_box <= I_debug_box;
                 S_debug_image_valid <= 1'b0;
@@ -614,14 +656,12 @@ module hdmi_mixer #(
 
             if(I_downsample_valid && (I_downsample_box_index == I_debug_box)) begin
                 if(I_downsample_pixel_addr == 10'd0) begin
-                    S_debug_image[10'd0] <= I_downsample_pixel[10:2];
                     S_debug_image_valid  <= 1'b0;
                     S_debug_capture_active <= 1'b1;
                     S_debug_expected_addr <= 10'd1;
                 end else if((I_debug_box == S_debug_captured_box) &&
                             S_debug_capture_active &&
                             (I_downsample_pixel_addr == S_debug_expected_addr)) begin
-                    S_debug_image[I_downsample_pixel_addr] <= I_downsample_pixel[10:2];
                     if(I_downsample_pixel_addr == 10'd783) begin
                         S_debug_image_valid <= 1'b1;
                         S_debug_capture_active <= 1'b0;
@@ -635,6 +675,28 @@ module hdmi_mixer #(
                     S_debug_expected_addr <= 10'd0;
                 end
             end
+        end else begin
+            S_debug_captured_box <= 3'd0;
+            S_debug_image_valid  <= 1'b0;
+            S_debug_capture_active <= 1'b0;
+            S_debug_expected_addr <= 10'd0;
+        end
+    end
+
+    // Separate synchronous read and write ports infer one small dual-port
+    // block RAM. Forward a colliding write so behavior matches the former
+    // asynchronous array for every visible pixel.
+    always @(posedge I_clk) begin
+        if(S_debug_write)
+            S_debug_image[I_downsample_pixel_addr] <= I_downsample_pixel[10:2];
+
+        if(ENABLE_DEBUG_PREVIEW != 0) begin
+            if(S_debug_write && (I_downsample_pixel_addr == S_debug_read_addr))
+                S_debug_gray <= I_downsample_pixel[10:2];
+            else
+                S_debug_gray <= S_debug_image[S_debug_read_addr];
+        end else begin
+            S_debug_gray <= 8'd0;
         end
     end
 
@@ -700,10 +762,6 @@ module hdmi_mixer #(
     always @(*) begin
         S_osd_hit   = 1'b0;
         S_osd_color = 24'd0;
-        S_logo_addr = 15'd0;
-        S_debug_addr = 10'd0;
-        S_debug_gray = 8'd255;
-
         S_logo_x = 12'd0;
         S_logo_y = 12'd0;
         S_char_idx = 4'd0;
@@ -756,7 +814,6 @@ module hdmi_mixer #(
                (S_y_2d >= LOGO_Y) && (S_y_2d < (LOGO_Y + LOGO_H))) begin
                 S_logo_x = S_x_2d - LOGO_X;
                 S_logo_y = S_y_2d - LOGO_Y;
-                S_logo_addr = (S_logo_y << 7) + (S_logo_y << 5) + S_logo_x;
                 if(S_logo_pixel[24]) begin
                     S_osd_hit   = 1'b1;
                     S_osd_color = S_logo_pixel[23:0];
@@ -980,16 +1037,9 @@ module hdmi_mixer #(
 
             // Display the selected 28x28 result at 16x scale. The green frame
             // marks a complete image; dark blue means that box is not ready.
-            if(I_debug_view &&
+            if((ENABLE_DEBUG_PREVIEW != 0) && I_debug_view &&
                (S_x_2d >= 12'd416) && (S_x_2d < 12'd864) &&
                (S_y_2d >= 12'd136) && (S_y_2d < 12'd584)) begin
-                S_debug_addr = ((((S_y_2d - 12'd136) >> 4) << 5) -
-                                (((S_y_2d - 12'd136) >> 4) << 2)) +
-                               ((S_x_2d - 12'd416) >> 4);
-                if(S_debug_image_valid)
-                    S_debug_gray = S_debug_image[S_debug_addr];
-                else
-                    S_debug_gray = 8'h20;
                 S_osd_hit = 1'b1;
                 if((S_x_2d == 12'd416) || (S_x_2d == 12'd863) ||
                    (S_y_2d == 12'd136) || (S_y_2d == 12'd583))

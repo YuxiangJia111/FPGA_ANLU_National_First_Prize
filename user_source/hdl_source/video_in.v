@@ -4,6 +4,7 @@ module video_in (
     input wire         I_rst_n,
 
     input wire         I_camera_clk,
+    input wire         I_camera_fifo_flush,
     input wire         I_camera_frame_start,
     input wire         I_camera_valid,
     input wire[127:0]  I_camera_data,
@@ -15,6 +16,12 @@ module video_in (
     input wire         I_video_out_rd_busy,
     output wire        O_video_in_wr_busy,
     output reg[1:0]    O_video_out_rp,     ///读指针
+    output reg[15:0]   O_capture_frame_id,
+    output reg[15:0]   O_frame_id_0,
+    output reg[15:0]   O_frame_id_1,
+    output reg[15:0]   O_frame_id_2,
+    output reg[15:0]   O_frame_id_3,
+    output reg[3:0]    O_frame_id_valid,
 
     output reg         O_ddr_user_wr_en,
     output reg[24:0]   O_ddr_user_addr,
@@ -43,7 +50,11 @@ module video_in (
     localparam IMAGE_BASE_ADDR_3 = 25'd21000000;
 
 
-    assign S_fifo_rst = S_camera_frame_start_extend_3d;
+    // Flush queued data from the preceding frame using the pre-ISP marker.
+    // It arrives more than two line-buffer delays before the packed ISP
+    // pixels, leaving time for the async FIFO's synchronized reset release.
+    // The post-ISP frame marker below remains responsible for DDR addressing.
+    assign S_fifo_rst = ~I_rst_n | I_camera_fifo_flush;
 
     // 以完整DDR写突发的占用标志仲裁，避免连续视频写入长期阻塞读通道。
     assign O_video_in_wr_busy = S_ddr_wr_valid;
@@ -115,6 +126,41 @@ module video_in (
                 end
             else
                 S_video_in_wp <= S_video_in_wp;
+    end
+
+    // Tag every DDR frame buffer with the capture sequence written into it.
+    // The tags stay in the DDR clock domain and let the display side report
+    // the age of the exact frame buffer it starts reading.
+    always @(posedge I_ddr_clk or negedge I_rst_n) begin
+        if(!I_rst_n) begin
+            O_capture_frame_id <= 16'd0;
+            O_frame_id_0 <= 16'd0;
+            O_frame_id_1 <= 16'd0;
+            O_frame_id_2 <= 16'd0;
+            O_frame_id_3 <= 16'd0;
+            O_frame_id_valid <= 4'b0000;
+        end
+        else if(S_frame_start && (!I_mipi_rx_error)) begin
+            O_capture_frame_id <= O_capture_frame_id + 16'd1;
+            case(S_video_in_wp)
+                2'd0: begin
+                    O_frame_id_0 <= O_capture_frame_id + 16'd1;
+                    O_frame_id_valid[0] <= 1'b1;
+                end
+                2'd1: begin
+                    O_frame_id_1 <= O_capture_frame_id + 16'd1;
+                    O_frame_id_valid[1] <= 1'b1;
+                end
+                2'd2: begin
+                    O_frame_id_2 <= O_capture_frame_id + 16'd1;
+                    O_frame_id_valid[2] <= 1'b1;
+                end
+                2'd3: begin
+                    O_frame_id_3 <= O_capture_frame_id + 16'd1;
+                    O_frame_id_valid[3] <= 1'b1;
+                end
+            endcase
+        end
     end
 
 

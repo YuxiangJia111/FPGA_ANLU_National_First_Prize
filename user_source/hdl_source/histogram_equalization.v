@@ -329,3 +329,164 @@ module histogram_equalization #(
     end
 
 endmodule
+
+module ycbcr2rgb_equalized (
+    input  wire        I_clk,
+    input  wire        I_rst_n,
+    input  wire [7:0]  I_equalized_y,
+    input  wire [23:0] I_rgb,
+    input  wire [23:0] I_ycbcr,
+    input  wire [7:0]  I_sobel,
+    input  wire [2:0]  I_mode,
+    input  wire        I_vsync,
+    input  wire        I_hsync,
+    input  wire        I_de,
+    input  wire        I_user,
+    input  wire        I_last,
+    output reg  [23:0] O_equalized_rgb,
+    output reg  [23:0] O_rgb,
+    output reg  [23:0] O_ycbcr,
+    output reg  [7:0]  O_sobel,
+    output reg  [2:0]  O_mode,
+    output reg         O_vsync,
+    output reg         O_hsync,
+    output reg         O_de,
+    output reg         O_user,
+    output reg         O_last
+);
+
+    wire signed [8:0] cb_delta_w =
+        $signed({1'b0, I_ycbcr[15:8]}) - 9'sd128;
+    wire signed [8:0] cr_delta_w =
+        $signed({1'b0, I_ycbcr[7:0]}) - 9'sd128;
+
+    reg [7:0] y_1;
+    reg signed [18:0] r_term_1;
+    reg signed [18:0] g_cb_term_1;
+    reg signed [18:0] g_cr_term_1;
+    reg signed [18:0] b_term_1;
+    reg [23:0] rgb_1, ycbcr_1;
+    reg [7:0] sobel_1;
+    reg [2:0] mode_1;
+    reg vsync_1, hsync_1, de_1, user_1, last_1;
+
+    reg signed [19:0] r_scaled_2;
+    reg signed [19:0] g_scaled_2;
+    reg signed [19:0] b_scaled_2;
+    reg [23:0] rgb_2, ycbcr_2;
+    reg [7:0] sobel_2;
+    reg [2:0] mode_2;
+    reg vsync_2, hsync_2, de_2, user_2, last_2;
+
+    always @(posedge I_clk or negedge I_rst_n) begin
+        if(!I_rst_n) begin
+            y_1           <= 8'd0;
+            r_term_1      <= 19'sd0;
+            g_cb_term_1   <= 19'sd0;
+            g_cr_term_1   <= 19'sd0;
+            b_term_1      <= 19'sd0;
+            rgb_1         <= 24'd0;
+            ycbcr_1       <= 24'd0;
+            sobel_1       <= 8'd0;
+            mode_1        <= 3'd0;
+            vsync_1       <= 1'b0;
+            hsync_1       <= 1'b0;
+            de_1          <= 1'b0;
+            user_1        <= 1'b0;
+            last_1        <= 1'b0;
+        end else begin
+            y_1         <= I_equalized_y;
+            r_term_1    <= cr_delta_w * 10'sd359;
+            g_cb_term_1 <= cb_delta_w * 9'sd88;
+            g_cr_term_1 <= cr_delta_w * 9'sd183;
+            b_term_1    <= cb_delta_w * 10'sd454;
+            rgb_1       <= I_rgb;
+            ycbcr_1     <= I_ycbcr;
+            sobel_1     <= I_sobel;
+            mode_1      <= I_mode;
+            vsync_1     <= I_vsync;
+            hsync_1     <= I_hsync;
+            de_1        <= I_de;
+            user_1      <= I_user;
+            last_1      <= I_last;
+        end
+    end
+
+    always @(posedge I_clk or negedge I_rst_n) begin
+        if(!I_rst_n) begin
+            r_scaled_2 <= 20'sd0;
+            g_scaled_2 <= 20'sd0;
+            b_scaled_2 <= 20'sd0;
+            rgb_2      <= 24'd0;
+            ycbcr_2    <= 24'd0;
+            sobel_2    <= 8'd0;
+            mode_2     <= 3'd0;
+            vsync_2    <= 1'b0;
+            hsync_2    <= 1'b0;
+            de_2       <= 1'b0;
+            user_2     <= 1'b0;
+            last_2     <= 1'b0;
+        end else begin
+            r_scaled_2 <= $signed({1'b0, y_1, 8'd0}) + r_term_1;
+            g_scaled_2 <= $signed({1'b0, y_1, 8'd0}) -
+                          g_cb_term_1 - g_cr_term_1;
+            b_scaled_2 <= $signed({1'b0, y_1, 8'd0}) + b_term_1;
+            rgb_2      <= rgb_1;
+            ycbcr_2    <= ycbcr_1;
+            sobel_2    <= sobel_1;
+            mode_2     <= mode_1;
+            vsync_2    <= vsync_1;
+            hsync_2    <= hsync_1;
+            de_2       <= de_1;
+            user_2     <= user_1;
+            last_2     <= last_1;
+        end
+    end
+
+    always @(posedge I_clk or negedge I_rst_n) begin
+        if(!I_rst_n) begin
+            O_equalized_rgb <= 24'd0;
+            O_rgb           <= 24'd0;
+            O_ycbcr         <= 24'd0;
+            O_sobel         <= 8'd0;
+            O_mode          <= 3'd0;
+            O_vsync         <= 1'b0;
+            O_hsync         <= 1'b0;
+            O_de            <= 1'b0;
+            O_user          <= 1'b0;
+            O_last          <= 1'b0;
+        end else begin
+            if(r_scaled_2 < 20'sd0)
+                O_equalized_rgb[23:16] <= 8'd0;
+            else if(r_scaled_2 > 20'sd65280)
+                O_equalized_rgb[23:16] <= 8'hff;
+            else
+                O_equalized_rgb[23:16] <= r_scaled_2[15:8];
+
+            if(g_scaled_2 < 20'sd0)
+                O_equalized_rgb[15:8] <= 8'd0;
+            else if(g_scaled_2 > 20'sd65280)
+                O_equalized_rgb[15:8] <= 8'hff;
+            else
+                O_equalized_rgb[15:8] <= g_scaled_2[15:8];
+
+            if(b_scaled_2 < 20'sd0)
+                O_equalized_rgb[7:0] <= 8'd0;
+            else if(b_scaled_2 > 20'sd65280)
+                O_equalized_rgb[7:0] <= 8'hff;
+            else
+                O_equalized_rgb[7:0] <= b_scaled_2[15:8];
+
+            O_rgb   <= rgb_2;
+            O_ycbcr <= ycbcr_2;
+            O_sobel <= sobel_2;
+            O_mode  <= mode_2;
+            O_vsync <= vsync_2;
+            O_hsync <= hsync_2;
+            O_de    <= de_2;
+            O_user  <= user_2;
+            O_last  <= last_2;
+        end
+    end
+
+endmodule
