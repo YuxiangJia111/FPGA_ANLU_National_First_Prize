@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Project Version="3" Minor="2" Path="D:/study/FPGA/file/FPGA_ANLU_National_First_Prize/td_project">
+<Project Version="3" Minor="2" Path="D:/Anlogic/osd_SC500_720P/td_project">
     <Project_Created_Time></Project_Created_Time>
     <TD_Encoding>UTF-8</TD_Encoding>
     <TD_Version>6.2.168116</TD_Version>
@@ -555,6 +555,14 @@
                     <Attr Name="CompileOrder" Val="86"/>
                 </FileInfo>
             </File>
+            <File Path="../user_source/hdl_source/latency_monitor.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="87"/>
+                </FileInfo>
+            </File>
         </Verilog>
         <System_Verilog>
             <File Path="../user_source/hdl_source/mipi_dphy_rx/mipi_dphy_rx_ph1p_mipiio_wrapper.sv">
@@ -775,6 +783,16 @@
             </UserParams>
         </Run>
     </Runs>
+    <MultiSeed>
+        <Property Enable="false" GenBit="true" EndStep="route" Random="false" Num="10" Init="0" Jobs="3" Save="1" Step="10">
+            <Filter enabled="false">
+                <congestion>100</congestion>
+                <place_swns>0</place_swns>
+                <route_swns>0</route_swns>
+            </Filter>
+        </Property>
+        <Seeds>0 10 20 30 40 50 60 70 80 90 </Seeds>
+    </MultiSeed>
     <Project_Settings>
     </Project_Settings>
 </Project>

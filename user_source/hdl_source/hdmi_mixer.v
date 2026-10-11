@@ -30,6 +30,10 @@ module hdmi_mixer #(
     input wire [10:0] I_downsample_pixel,
     input wire [9:0]  I_downsample_pixel_addr,
     input wire [2:0]  I_downsample_box_index,
+    input wire [31:0] I_camera_latency_us,
+    input wire        I_camera_latency_valid,
+    input wire [31:0] I_cnn_latency_us,
+    input wire        I_cnn_latency_valid,
 
     output wire       O_video_rd_en,
     input wire[23:0]  I_video_rd_data,
@@ -161,6 +165,158 @@ module hdmi_mixer #(
     localparam CHAR_COLON        = 8'h3a;
     localparam [11:0] BBOX_LABEL_MAX_X = IMG_WIDTH - 32;
     localparam [11:0] BBOX_LABEL_MAX_Y = IMG_HEIGHT - 32;
+
+    localparam [11:0] HUD_X = IMG_WIDTH - 16 - 320;
+    localparam [11:0] HUD_Y = 12'd16;
+    reg [31:0] S_cam_shift, S_cnn_shift;
+    reg [23:0] S_cam_bcd_work, S_cnn_bcd_work;
+    reg [23:0] S_cam_bcd, S_cnn_bcd;
+    reg [1:0] S_latency_valid_pending, S_latency_over_pending;
+    reg [1:0] S_latency_valid, S_latency_over;
+    reg [4:0] S_latency_cycle;
+    reg S_latency_busy;
+    wire [23:0] S_cam_bcd_next, S_cnn_bcd_next;
+    wire [11:0] S_hud_x = S_x_2d - HUD_X;
+    wire [11:0] S_hud_y = S_y_2d - HUD_Y;
+    wire S_hud_hit = S_video_de_2d && (S_x_2d >= HUD_X) &&
+        (S_x_2d < HUD_X + 12'd320) && (S_y_2d >= HUD_Y) &&
+        (S_y_2d < HUD_Y + 12'd32);
+    wire S_hud_line = S_hud_y[4];
+    wire [4:0] S_hud_cell = S_hud_x[8:4];
+    reg [4:0] S_hud_value_cell;
+    reg [7:0] S_hud_char;
+    reg [23:0] S_hud_bcd;
+    reg S_hud_valid, S_hud_over;
+    wire [15:0] S_hud_lib_bits;
+    wire [15:0] S_hud_bits = (S_hud_char == 8'h2e) ?
+        (((S_hud_y[3:0] == 4'd11) || (S_hud_y[3:0] == 4'd12)) ?
+         16'h0180 : 16'd0) : S_hud_lib_bits;
+    wire [23:0] S_hud_color = S_hud_bits[4'd15 - S_hud_x[3:0]] ?
+        (S_hud_line ? COLOR_DYN_TEXT : COLOR_TEXT) : 24'h102030;
+
+    // Six small add-3 cells, followed by one serial binary-bit shift.
+    function [23:0] F_latency_bcd_step;
+        input [23:0] bcd;
+        input binary_bit;
+        reg [23:0] adjusted;
+        integer digit;
+        begin
+            adjusted = bcd;
+            for(digit = 0; digit < 6; digit = digit + 1)
+                if(bcd[digit*4 +: 4] >= 4'd5)
+                    adjusted[digit*4 +: 4] = bcd[digit*4 +: 4] + 4'd3;
+            F_latency_bcd_step = {adjusted[22:0], binary_bit};
+        end
+    endfunction
+
+    assign S_cam_bcd_next = F_latency_bcd_step(S_cam_bcd_work, S_cam_shift[31]);
+    assign S_cnn_bcd_next = F_latency_bcd_step(S_cnn_bcd_work, S_cnn_shift[31]);
+
+    always @(posedge I_clk or negedge I_rst_n) begin
+        if(!I_rst_n) begin
+            S_cam_shift <= 32'd0;
+            S_cnn_shift <= 32'd0;
+            S_cam_bcd_work <= 24'd0;
+            S_cnn_bcd_work <= 24'd0;
+            S_cam_bcd <= 24'd0;
+            S_cnn_bcd <= 24'd0;
+            S_latency_valid_pending <= 2'd0;
+            S_latency_over_pending <= 2'd0;
+            S_latency_valid <= 2'd0;
+            S_latency_over <= 2'd0;
+            S_latency_cycle <= 5'd0;
+            S_latency_busy <= 1'b0;
+        end else if(I_video_user) begin
+            // Bound the converter; OVER is displayed instead of capped digits.
+            S_cam_shift <= (I_camera_latency_us > 32'd999999) ?
+                           32'd999999 : I_camera_latency_us;
+            S_cnn_shift <= (I_cnn_latency_us > 32'd999999) ?
+                           32'd999999 : I_cnn_latency_us;
+            S_latency_valid_pending <= {I_cnn_latency_valid, I_camera_latency_valid};
+            S_latency_over_pending <= {I_cnn_latency_us > 32'd999999,
+                                       I_camera_latency_us > 32'd999999};
+            S_cam_bcd_work <= 24'd0;
+            S_cnn_bcd_work <= 24'd0;
+            S_latency_cycle <= 5'd0;
+            S_latency_busy <= 1'b1;
+        end else if(S_latency_busy) begin
+            S_cam_shift <= {S_cam_shift[30:0], 1'b0};
+            S_cnn_shift <= {S_cnn_shift[30:0], 1'b0};
+            S_cam_bcd_work <= S_cam_bcd_next;
+            S_cnn_bcd_work <= S_cnn_bcd_next;
+            if(S_latency_cycle == 5'd31) begin
+                S_latency_busy <= 1'b0;
+                // Normal video finishes on line zero. Never change a visible HUD.
+                if(S_y < HUD_Y) begin
+                    S_cam_bcd <= S_cam_bcd_next;
+                    S_cnn_bcd <= S_cnn_bcd_next;
+                    S_latency_valid <= S_latency_valid_pending;
+                    S_latency_over <= S_latency_over_pending;
+                end
+            end else
+                S_latency_cycle <= S_latency_cycle + 5'd1;
+        end
+    end
+
+    // Both 16-pixel rows share one ROM. Character cells use only bit slices.
+    always @(*) begin
+        S_hud_char = 8'h20;
+        S_hud_value_cell = 5'd31;
+        S_hud_bcd = S_hud_line ? S_cnn_bcd : S_cam_bcd;
+        S_hud_valid = S_latency_valid[S_hud_line];
+        S_hud_over = S_latency_over[S_hud_line];
+        if(S_hud_line) begin
+            case(S_hud_cell)
+                5'd0: S_hud_char = "C";
+                5'd1, 5'd2: S_hud_char = "N";
+                5'd3: S_hud_char = ":";
+                default: begin end
+            endcase
+            if(S_hud_cell >= 5'd5)
+                S_hud_value_cell = S_hud_cell - 5'd5;
+        end else begin
+            case(S_hud_cell)
+                5'd0: S_hud_char = "C";
+                5'd1: S_hud_char = "A";
+                5'd2, 5'd6: S_hud_char = "M";
+                5'd4: S_hud_char = "H";
+                5'd5: S_hud_char = "D";
+                5'd7: S_hud_char = "I";
+                5'd8: S_hud_char = ":";
+                default: begin end
+            endcase
+            if(S_hud_cell >= 5'd10)
+                S_hud_value_cell = S_hud_cell - 5'd10;
+        end
+        if(!S_hud_valid || S_hud_over) begin
+            case(S_hud_value_cell)
+                5'd0: S_hud_char = S_hud_valid ? "O" : "W";
+                5'd1: S_hud_char = S_hud_valid ? "V" : "A";
+                5'd2: S_hud_char = S_hud_valid ? "E" : "I";
+                5'd3: S_hud_char = S_hud_valid ? "R" : "T";
+                default: begin end
+            endcase
+        end else begin
+            case(S_hud_value_cell)
+                5'd0: S_hud_char = CHAR_0 + {4'd0, S_hud_bcd[23:20]};
+                5'd1: S_hud_char = CHAR_0 + {4'd0, S_hud_bcd[19:16]};
+                5'd2: S_hud_char = CHAR_0 + {4'd0, S_hud_bcd[15:12]};
+                5'd3: S_hud_char = ".";
+                5'd4: S_hud_char = CHAR_0 + {4'd0, S_hud_bcd[11:8]};
+                5'd5: S_hud_char = CHAR_0 + {4'd0, S_hud_bcd[7:4]};
+                5'd6: S_hud_char = CHAR_0 + {4'd0, S_hud_bcd[3:0]};
+                5'd8: S_hud_char = "M";
+                5'd9: S_hud_char = "S";
+                default: begin end
+            endcase
+        end
+    end
+
+    osd_char_lib u_latency_char_lib(
+        .I_char     (S_hud_char),
+        .I_row      (S_hud_y[3:0]),
+        .O_row_bits (S_hud_lib_bits)
+    );
 
     function [4:0] F_logo_text_bits;
         input [3:0] I_char;
@@ -1080,7 +1236,10 @@ module hdmi_mixer #(
             S_video_data_1d  <= I_video_rd_data;
             S_video_data_2d  <= S_video_data_1d;
 
-            if(DEBUG_MODE == 1) begin
+            if(S_hud_hit) begin
+                O_hdmi_data <= S_hud_color;
+            end
+            else if(DEBUG_MODE == 1) begin
                 if(S_video_de_2d) begin
                     if(S_x < 12'd128)
                         O_hdmi_data <= 24'hff0000;

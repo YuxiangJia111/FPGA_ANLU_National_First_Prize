@@ -35,7 +35,11 @@ module bbox_cnn_adapter (
     output reg  [95:0] O_y_min,
     output reg  [95:0] O_y_max,
     output reg  [7:0]  O_digit_valid,
-    output reg  [31:0] O_digits
+    output reg  [31:0] O_digits,
+    output reg  [31:0] O_cnn_latency_us,
+    output reg         O_cnn_latency_valid,
+    output reg         O_cnn_measure_start,
+    output reg         O_cnn_measure_done
 );
     localparam [2:0] C_ARM   = 3'd0;
     localparam [2:0] C_LOAD  = 3'd1;
@@ -65,6 +69,7 @@ module bbox_cnn_adapter (
     reg pixel_request_sync_1, pixel_request_sync_2;
     reg pixel_ack_sync_1, pixel_ack_sync_2;
     reg [3:0] result_mailbox_data;
+    reg [31:0] result_mailbox_latency;
     reg result_request;
     reg result_ack;
     reg result_request_sync_1, result_request_sync_2;
@@ -79,6 +84,8 @@ module bbox_cnn_adapter (
     reg [95:0] batch_x_min, batch_x_max, batch_y_min, batch_y_max;
     reg [7:0] batch_digit_valid;
     reg [31:0] batch_digits;
+    reg [4:0] cnn_us_divider;
+    reg [31:0] cnn_elapsed_us;
 
     assign O_crop_accept = pixel_rst_n && I_crop_update && !O_batch_busy;
     assign O_ready = pixel_rst_n && O_batch_busy && !completed_batch &&
@@ -124,8 +131,14 @@ module bbox_cnn_adapter (
             O_y_max <= 96'd0;
             O_digit_valid <= 8'd0;
             O_digits <= 32'd0;
+            O_cnn_latency_us <= 32'd0;
+            O_cnn_latency_valid <= 1'b0;
+            O_cnn_measure_start <= 1'b0;
+            O_cnn_measure_done <= 1'b0;
         end else begin
             O_batch_done <= 1'b0;
+            O_cnn_measure_start <= 1'b0;
+            O_cnn_measure_done <= 1'b0;
             if (O_crop_accept) begin
                 O_batch_busy <= 1'b1;
                 completed_batch <= 1'b0;
@@ -147,12 +160,17 @@ module bbox_cnn_adapter (
                     active_last_box <= ({1'b0, I_box_index} == I_box_count - 1'b1);
                     waiting_result <= 1'b1;
                 end
+                if (I_pixel_addr == 10'd0)
+                    O_cnn_measure_start <= 1'b1;
             end
 
             if (waiting_result && (result_request_sync_2 != result_ack)) begin
                 result_ack <= result_request_sync_2;
                 batch_digits[active_slot*4 +: 4] <= result_mailbox_data;
                 batch_digit_valid[active_slot] <= (result_mailbox_data <= 4'd9);
+                O_cnn_latency_us <= result_mailbox_latency;
+                O_cnn_latency_valid <= 1'b1;
+                O_cnn_measure_done <= 1'b1;
                 waiting_result <= 1'b0;
                 if (active_last_box) completed_batch <= 1'b1;
             end
@@ -198,11 +216,14 @@ module bbox_cnn_adapter (
             pixel_ack <= 1'b0;
             result_request <= 1'b0;
             result_mailbox_data <= 4'd0;
+            result_mailbox_latency <= 32'd0;
             stop_was_low <= 1'b0;
             O_cnn_go <= 1'b1;
             O_cnn_we <= 1'b0;
             O_cnn_data <= 11'd0;
             O_cnn_addr <= 13'd0;
+            cnn_us_divider <= 5'd0;
+            cnn_elapsed_us <= 32'd0;
         end else begin
             O_cnn_we <= 1'b0;
             case (cnn_state)
@@ -226,12 +247,22 @@ module bbox_cnn_adapter (
                 C_START: begin
                     O_cnn_go <= 1'b0;
                     stop_was_low <= !I_cnn_stop;
+                    cnn_us_divider <= 5'd0;
+                    cnn_elapsed_us <= 32'd0;
                     cnn_state <= C_RUN;
                 end
                 C_RUN: begin
+                    if(cnn_us_divider == 5'd23) begin
+                        cnn_us_divider <= 5'd0;
+                        cnn_elapsed_us <= cnn_elapsed_us + 32'd1;
+                    end else begin
+                        cnn_us_divider <= cnn_us_divider + 5'd1;
+                    end
                     if (!I_cnn_stop) stop_was_low <= 1'b1;
                     if (stop_was_low && I_cnn_stop) begin
                         result_mailbox_data <= I_cnn_result;
+                        result_mailbox_latency <= cnn_elapsed_us +
+                            ((cnn_us_divider != 5'd0) ? 32'd1 : 32'd0);
                         result_request <= ~result_request;
                         cnn_state <= C_REPLY;
                     end

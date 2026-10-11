@@ -58,6 +58,15 @@ wire isp_tlast;
 wire isp_tuser;
 wire isp_tvalid;
 wire [23:0] display_video_data;
+wire [7:0] ddr_latency_frames;
+wire [31:0] cnn_latency_us;
+wire cnn_latency_valid;
+wire cnn_measure_start;
+wire cnn_measure_done;
+wire [31:0] measured_camera_latency_us;
+wire measured_camera_latency_valid;
+wire [31:0] measured_cnn_latency_us;
+wire measured_cnn_latency_valid;
 wire [23:0] processed_video_data;
 wire [23:0] processed_ycbcr_data;
 wire display_video_vsync;
@@ -131,10 +140,26 @@ reg  [7:0] bbox_luma_threshold_sync_1;
 reg  [7:0] bbox_luma_threshold_sync_2;
 reg  [2:0] bbox_connect_gap_sync_1;
 reg  [2:0] bbox_connect_gap_sync_2;
+wire hdmi_frame_start;
 
 assign system_rst_n = pll_lock;
 assign O_screen_pwm = 1'b1;
 assign debug_view = (image_mode_sync_2 == 3'b110);
+
+latency_monitor u_latency_monitor (
+    .I_rst_n               (system_rst_n),
+    .I_sys_clk             (I_sys_clk),
+    .I_camera_clk          (camera_video_clk),
+    .I_camera_frame_start  (camera_tuser),
+    .I_hdmi_clk            (hdmi_pixel_clk),
+    .I_hdmi_frame_start    (hdmi_frame_start),
+    .I_cnn_start           (cnn_measure_start),
+    .I_cnn_done            (cnn_measure_done),
+    .O_camera_latency_us   (measured_camera_latency_us),
+    .O_camera_latency_valid(measured_camera_latency_valid),
+    .O_cnn_latency_us      (measured_cnn_latency_us),
+    .O_cnn_latency_valid   (measured_cnn_latency_valid)
+);
 
 control_top u_control_top (
     .I_clk          (clk_24m),
@@ -245,6 +270,7 @@ DDR_top u_DDR_top (
     .I_display_vsync       (display_video_vsync),
     .I_display_rd_en       (display_video_rd_en),
     .O_display_data        (display_video_data),
+    .O_latency_frames      (ddr_latency_frames),
     .O_debug_status        (ddr_debug_status),
     .O_init_calib_complete (ddr_init_calib_complete),
     .ddr_addr              (ddr_addr),
@@ -394,6 +420,10 @@ bbox_cnn_adapter u_bbox_cnn_adapter (
     .O_cnn_addr     (cnn_pixel_addr),
     .I_cnn_stop     (cnn_stop),
     .I_cnn_result   (cnn_result),
+    .O_cnn_latency_us (cnn_latency_us),
+    .O_cnn_latency_valid (cnn_latency_valid),
+    .O_cnn_measure_start (cnn_measure_start),
+    .O_cnn_measure_done  (cnn_measure_done),
     .O_bbox_valid   (cnn_bbox_valid),
     .O_x_min        (cnn_bbox_x_min),
     .O_x_max        (cnn_bbox_x_max),
@@ -437,6 +467,11 @@ display_top u_display_top (
     .I_downsample_pixel      (downsample_pixel),
     .I_downsample_pixel_addr (downsample_pixel_addr),
     .I_downsample_box_index  (downsample_box_index),
+    .I_camera_latency_us    (measured_camera_latency_us),
+    .I_camera_latency_valid (measured_camera_latency_valid),
+    .I_cnn_latency_us       (measured_cnn_latency_us),
+    .I_cnn_latency_valid    (measured_cnn_latency_valid),
+    .O_hdmi_frame_start     (hdmi_frame_start),
     .O_video_vsync  (display_video_vsync),
     .O_video_rd_en  (display_video_rd_en),
     .O_process_vsync(process_video_vsync),

@@ -24,6 +24,11 @@ module display_top (
     input  wire [10:0] I_downsample_pixel,
     input  wire [9:0]  I_downsample_pixel_addr,
     input  wire [2:0]  I_downsample_box_index,
+    input  wire [31:0] I_camera_latency_us,
+    input  wire        I_camera_latency_valid,
+    input  wire [31:0] I_cnn_latency_us,
+    input  wire        I_cnn_latency_valid,
+    output wire        O_hdmi_frame_start,
     output wire        O_video_vsync,
     output wire        O_video_rd_en,
     output wire        O_process_vsync,
@@ -47,6 +52,31 @@ wire hdmi_hsync;
 wire hdmi_de;
 wire [23:0] hdmi_data;
 wire unused_mixer_rd_en;
+reg hdmi_vsync_d;
+reg hdmi_de_d;
+reg hdmi_sync_sampled;
+reg hdmi_frame_armed;
+
+// Combinational pulse accompanies the pixel sampled by the TX on this edge.
+// Do not report the startup partial frame before observing a real sync edge.
+assign O_hdmi_frame_start = I_rst_n && hdmi_frame_armed &&
+                            hdmi_de && !hdmi_de_d;
+always @(posedge I_pixel_clk or negedge I_rst_n) begin
+    if(!I_rst_n) begin
+        hdmi_vsync_d <= 1'b0;
+        hdmi_de_d <= 1'b0;
+        hdmi_sync_sampled <= 1'b0;
+        hdmi_frame_armed <= 1'b0;
+    end else begin
+        hdmi_vsync_d <= hdmi_vsync;
+        hdmi_de_d <= hdmi_de;
+        hdmi_sync_sampled <= 1'b1;
+        if(hdmi_sync_sampled && hdmi_vsync && !hdmi_vsync_d)
+            hdmi_frame_armed <= 1'b1;
+        else if(hdmi_de && !hdmi_de_d)
+            hdmi_frame_armed <= 1'b0;
+    end
+end
 
 assign O_video_vsync = ~video_vsync;
 assign O_video_rd_en = video_de;
@@ -103,6 +133,10 @@ hdmi_mixer #(
     .I_downsample_pixel      (I_downsample_pixel),
     .I_downsample_pixel_addr (I_downsample_pixel_addr),
     .I_downsample_box_index  (I_downsample_box_index),
+    .I_camera_latency_us    (I_camera_latency_us),
+    .I_camera_latency_valid (I_camera_latency_valid),
+    .I_cnn_latency_us       (I_cnn_latency_us),
+    .I_cnn_latency_valid    (I_cnn_latency_valid),
     .O_video_rd_en   (unused_mixer_rd_en),
     .I_video_rd_data (I_video_data),
     .O_hdmi_vsync    (hdmi_vsync),
