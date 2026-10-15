@@ -32,6 +32,9 @@ module fpga_apb_regs #(
     integer lane;
 
     wire access = psel && penable;
+    wire heartbeat_refresh = access && pwrite && !pslverr &&
+                             (paddr == 20'h00020) && (|pstrb) &&
+                             (!heartbeat_seen || pwdata != heartbeat_last);
     wire read_only = (paddr == 20'h00000 || paddr == 20'h00004 ||
                       paddr == 20'h00008 || paddr == 20'h0000C ||
                       paddr == 20'h00018 || paddr == 20'h0001C ||
@@ -119,7 +122,12 @@ module fpga_apb_regs #(
             end
 
             if (armed && !timeout_fault) begin
-                if (heartbeat_counter >= HEARTBEAT_TIMEOUT_CYCLES - 1) begin
+                // A changed heartbeat has priority over the watchdog increment.
+                // Without this branch, the later increment in this always block
+                // overwrites the counter reset performed by the APB write case.
+                if (heartbeat_refresh) begin
+                    heartbeat_counter <= 32'd0;
+                end else if (heartbeat_counter >= HEARTBEAT_TIMEOUT_CYCLES - 1) begin
                     timeout_fault <= 1'b1;
                     armed <= 1'b0;
                     irq_status[2] <= 1'b1;

@@ -168,9 +168,9 @@ assign system_rst_n = pll_lock;
 assign mcu_reset_release = I_rst_n && mcu_pll_locked;
 assign mcu_reset = !mcu_reset_release || !(&mcu_reset_count);
 assign mcu_apb_reset = mcu_apb_reset_sync[2];
-// S3 visible fail-safe indicator: the screen backlight is enabled only while
-// the MCU heartbeat is healthy and the FPGA safety guard is armed.
-assign O_screen_pwm = mcu_safe_enable;
+// Keep the display backlight independent from the MCU safety state.
+// S2 baseline behavior: the screen remains enabled continuously.
+assign O_screen_pwm = 1'b1;
 assign debug_view = (image_mode_sync_2 == 3'b110);
 
 MCU_PLL u_MCU_PLL (
