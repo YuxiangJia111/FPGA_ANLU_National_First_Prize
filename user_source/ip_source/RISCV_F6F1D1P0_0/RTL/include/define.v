@@ -1,0 +1,3 @@
+`define UART0_Available_a31158358f1d
+`define AHB_Available_a31158358f1d
+`define APB_Available_a31158358f1d

@@ -4,6 +4,9 @@ module design_top_wrapper (
     input  wire        I_sys_clk,
     input  wire        I_rst_n,
 
+    input  wire        I_uart0_rx,
+    output wire        O_uart0_tx,
+
     output wire        O_cam_scl,
     inout  wire        IO_cam_sda,
     output wire        O_cam_24m,
@@ -47,6 +50,21 @@ wire hdmi_pixel_clk;
 wire hdmi_serial_clk;
 wire pll_lock;
 wire system_rst_n;
+wire mcu_core_clk;
+wire mcu_timer_clk;
+wire mcu_pll_locked;
+wire mcu_reset_release;
+wire mcu_reset;
+wire mcu_apb_reset;
+wire mcu_ahb_clk;
+wire [1:0] mcu_htrans;
+wire mcu_hwrite;
+wire [30:0] mcu_haddr;
+wire [2:0] mcu_hsize;
+wire [31:0] mcu_hwdata;
+wire [31:0] mcu_hrdata;
+wire mcu_apb_test_irq;
+wire mcu_safe_enable;
 wire camera_video_clk;
 wire [39:0] camera_tdata;
 wire camera_tlast;
@@ -140,11 +158,115 @@ reg  [7:0] bbox_luma_threshold_sync_1;
 reg  [7:0] bbox_luma_threshold_sync_2;
 reg  [2:0] bbox_connect_gap_sync_1;
 reg  [2:0] bbox_connect_gap_sync_2;
+reg  [15:0] mcu_reset_count = 16'd0;
+reg  [2:0] mcu_apb_reset_sync = 3'b111;
+reg  [2:0] mcu_ahb_reset_sync = 3'b111;
+reg  [1:0] mcu_irq_sync = 2'b00;
 wire hdmi_frame_start;
 
 assign system_rst_n = pll_lock;
-assign O_screen_pwm = 1'b1;
+assign mcu_reset_release = I_rst_n && mcu_pll_locked;
+assign mcu_reset = !mcu_reset_release || !(&mcu_reset_count);
+assign mcu_apb_reset = mcu_apb_reset_sync[2];
+// S3 visible fail-safe indicator: the screen backlight is enabled only while
+// the MCU heartbeat is healthy and the FPGA safety guard is armed.
+assign O_screen_pwm = mcu_safe_enable;
 assign debug_view = (image_mode_sync_2 == 3'b110);
+
+MCU_PLL u_MCU_PLL (
+    .refclk   (I_sys_clk),
+    .clk0_out (mcu_core_clk),
+    .clk1_out (mcu_timer_clk),
+    .lock     (mcu_pll_locked),
+    .reset    (1'b0)
+);
+
+// Assert immediately when the board reset is pressed or the MCU PLL loses
+// lock. Release after 65535 core-clock cycles, matching the proven MCU design.
+always @(posedge mcu_core_clk or negedge mcu_reset_release) begin
+    if (!mcu_reset_release)
+        mcu_reset_count <= 16'd0;
+    else if (!(&mcu_reset_count))
+        mcu_reset_count <= mcu_reset_count + 16'd1;
+end
+
+// APB is clocked directly from the board 50 MHz source. Synchronize only the
+// reset release; assertion remains asynchronous.
+always @(posedge I_sys_clk or posedge mcu_reset) begin
+    if (mcu_reset)
+        mcu_apb_reset_sync <= 3'b111;
+    else
+        mcu_apb_reset_sync <= {mcu_apb_reset_sync[1:0], 1'b0};
+end
+
+always @(posedge mcu_ahb_clk or posedge mcu_reset) begin
+    if (mcu_reset)
+        mcu_ahb_reset_sync <= 3'b111;
+    else
+        mcu_ahb_reset_sync <= {mcu_ahb_reset_sync[1:0], 1'b0};
+end
+
+fpga_apb_bridge u_mcu_apb_bridge (
+    .ahb_clk   (mcu_ahb_clk),
+    .ahb_reset (mcu_ahb_reset_sync[2]),
+    .htrans    (mcu_htrans),
+    .hwrite    (mcu_hwrite),
+    .haddr     (mcu_haddr),
+    .hsize     (mcu_hsize),
+    .hwdata    (mcu_hwdata),
+    .hrdata    (mcu_hrdata),
+    .apb_clk   (I_sys_clk),
+    .apb_reset (mcu_apb_reset),
+    .irq       (mcu_apb_test_irq),
+    .safe_enable(mcu_safe_enable)
+);
+
+always @(posedge mcu_core_clk or posedge mcu_reset) begin
+    if (mcu_reset)
+        mcu_irq_sync <= 2'b00;
+    else
+        mcu_irq_sync <= {mcu_irq_sync[0], mcu_apb_test_irq};
+end
+
+RISCV_F6F1D1P0_0 u_riscv_mcu (
+    .core_sysrst (),
+    .uart0_tx    (O_uart0_tx),
+    .uart0_rx    (I_uart0_rx),
+
+    // Proven AHB mailbox at CPU 0x80000100 drives the FPGA APB register bank.
+    .ahb_clk     (mcu_ahb_clk),
+    .htrans      (mcu_htrans),
+    .hwrite      (mcu_hwrite),
+    .haddr       (mcu_haddr),
+    .hsize       (mcu_hsize),
+    .hburst      (),
+    .hprot       (),
+    .hmastlock   (),
+    .hwdata      (mcu_hwdata),
+    .hrdata      (mcu_hrdata),
+    .hresp       (2'b00),
+    .hready      (1'b1),
+
+    .apb_clk     (I_sys_clk),
+    .apb_rst     (mcu_apb_reset),
+    .paddr       (),
+    .psel        (),
+    .penable     (),
+    .pwrite      (),
+    .pwdata      (),
+    .pstrobe     (),
+    .pprot       (),
+    .prdata      (32'd0),
+    .pready      (1'b1),
+    .pslverr     (1'b0),
+
+    .core_clk    (mcu_core_clk),
+    .timer_clk   (mcu_timer_clk),
+    .core_reset  (mcu_reset),
+    .por_reset   (mcu_reset),
+    .nmi         (1'b0),
+    .clic_irq    ({22'd0, mcu_irq_sync[1]})
+);
 
 latency_monitor u_latency_monitor (
     .I_rst_n               (system_rst_n),

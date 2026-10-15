@@ -1,2 +1,35 @@
 安路二方案（基础）.md
 新HX1P35A开发板手册-HDL版2604.pdf
+
+# Local agent and scratch work
+/.planning/
+/.tmp/
+/tmp/
+
+# The MCU firmware is maintained in its own repository.
+/FPGA_MCU/
+/docs/
+/使用资料/
+
+# Tool-generated logs and local datasets
+*.log
+*.logw
+__pycache__/
+*.pyc
+/tools/uart_dataset_collector/dataset/
+
+# FutureDynasty build outputs
+**/build/
+**/Debug/
+**/Release/
+*.o
+*.obj
+*.elf
+*.map
+*.bin
+*.hex
+
+# TD transient state
+*.lock.f
+*.begin.f
+*.temp.f

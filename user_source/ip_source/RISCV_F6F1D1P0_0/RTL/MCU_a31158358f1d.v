@@ -1,0 +1,164 @@
+
+`timescale 1ps/1ps 
+
+module MCU_a31158358f1d
+#(
+	parameter  MCU_JTAG_SEL      = "1",
+	parameter  MCU_RESET_VECTOR  = 32'hFFFFFFFF,
+	parameter  AHB_FREQ          = "50",
+	parameter  QSPI_FREQ         = "20",
+    parameter  MCU_DPLL_BYPASS   = "DISABLE",
+	parameter  MCU_DPLL_POST_DIV =   0 
+)
+(
+    output        core_sysrst,
+
+	output        uart0_tx,
+	input         uart0_rx,
+
+	output        ahb_clk,
+	output [1:0]  htrans,
+	output        hwrite,
+	output [30:0] haddr,
+	output [2:0]  hsize,
+	output [2:0]  hburst,
+	output [3:0]  hprot,
+	output        hmastlock,
+	output [31:0] hwdata,
+	input  [31:0] hrdata,
+	input  [1:0]  hresp,
+	input         hready,
+
+	input         apb_clk,
+	input         apb_rst,
+	output [19: 0]paddr,
+	output        psel,
+	output        penable,
+	output        pwrite,
+	output [31:0] pwdata,
+	output [3:0]  pstrobe,
+	output [2:0]  pprot,
+	input  [31:0] prdata,
+	input         pready,
+	input         pslverr,
+	
+	input         core_clk,
+	input         timer_clk,
+	input         core_reset,
+	input         por_reset,
+	input         nmi,
+	input [22:0]  clic_irq
+);
+
+    wire ahb_clk_temp;
+
+    generate if(MCU_DPLL_BYPASS == "ENABLE") 
+        assign ahb_clk = core_clk;
+    else
+        assign ahb_clk = ahb_clk_temp;
+    endgenerate
+
+	PH1P_PHY_MCU
+	#(
+		.MCU_JTAG_SEL(MCU_JTAG_SEL),
+		.MCU_RESET_VECTOR(MCU_RESET_VECTOR),
+		.MCU_DPLL_FEED_TYPE("EXTERNAL"),
+		.AHB_FREQ(AHB_FREQ),
+		.QSPI1_FREQ(QSPI_FREQ),
+        .MCU_DPLL_BYPASS(MCU_DPLL_BYPASS),
+		.MCU_DPLL_POST_DIV(MCU_DPLL_POST_DIV)
+	)PH1P_PHY_MCU_Inst
+	(
+        .core_sysrst(core_sysrst),
+		.core_clk(core_clk),
+		.timer_clk(timer_clk),
+		.fb_clk(ahb_clk_temp),
+		.core_reset(core_reset),
+		.por_reset(por_reset),
+		.core_clk_en(1'b1),
+		.dbg_stop(1'b0),
+		.dbg_stop_on_reset(1'b1),
+		.dbg_stop_at_boot(1'b0),
+		.dbg_mux_sel(2'h3),
+		.nmi(nmi),
+		.clic_irq(clic_irq),
+
+		.jtag_tck(1'h0),
+		.jtag_tms(1'h0),
+		.jtag_tdi(1'h0),
+
+		.gpio0_in(1'h0),
+
+		.gpio1_in(1'h0),
+
+		.gpio2_in(1'h0),
+
+		.gpio3_in(1'h0),
+
+		.gpio4_in(1'h0),
+
+		.gpio5_in(1'h0),
+
+		.gpio6_in(1'h0),
+
+		.gpio7_in(1'h0),
+
+		.uart0_tx(uart0_tx),
+		.uart0_rx(uart0_rx),
+
+		.uart1_rx(1'h0),
+
+		.i2c_sda_in(1'h0),
+		.i2c_scl_in(1'h0),
+
+		.qspi1_d0_in(1'h0),
+		.qspi1_d1_in(1'h0),
+		.qspi1_d2_in(1'h0),
+		.qspi1_d3_in(1'h0),
+
+		.qspi0_dw32_sel(1'b0),
+		.qspi0_spare_sel(1'b0),
+
+		.ahb_clk(ahb_clk_temp),
+		.htrans(htrans),
+		.hwrite(hwrite),
+		.haddr(haddr),
+		.hsize(hsize),
+		.hburst(hburst),
+		.hprot(hprot),
+		.hmastlock(hmastlock),
+		.hwdata(hwdata),
+		.hrdata(hrdata),
+		.hresp(hresp),
+		.hready(hready),
+
+		.apb_clk(apb_clk),
+		.apb_rst(apb_rst),
+		.paddr(paddr),
+		.psel(psel),
+		.penable(penable),
+		.pwrite(pwrite),
+		.pwdata(pwdata),
+		.pstrobe(pstrobe),
+		.pprot(pprot),
+		.prdata(prdata),
+		.pready(pready),
+		.pslverr(pslverr),
+
+		.scan_mode_n(1'h1),
+		.scan_en_n(1'h1),
+		.pll_bypass(1'h0),
+		.pib_pll_bypass(1'h0),
+		.scan_rst_n(1'h0),
+		.scan_in(73'h0),
+		.wrapper_scan_in_0(1'h0),
+		.wrapper_scan_in_1(1'h0),
+		.chain_scan_in(1'h0)
+	);
+
+	PH1P_LOGIC_QSPI2MCU u_PH1P_LOGIC_QSPI2MCU
+	(
+		.qspi_pib_sel_i(1'b1)
+	);
+
+endmodule
