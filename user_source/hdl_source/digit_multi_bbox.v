@@ -32,6 +32,18 @@ module digit_multi_bbox #(
     input  wire [15:0]                   I_gray_read_addr,
     input  wire                          I_gray_read_bank,
     output wire [3:0]                    O_gray_read_data,
+    input  wire                         I_motion_enable,
+    // Completed interval-difference metadata follows the same capture as boxes.
+    input wire [269:0] I_completed_blocks,
+    input wire I_completed_valid, I_completed_ready, I_completed_global,
+    output reg [269:0] O_bbox_motion_blocks,
+    output reg O_bbox_motion_ready, O_bbox_motion_global,
+    output reg                          O_motion_sample_valid,
+    output reg                          O_motion_reference_valid,
+    output reg [3:0]                    O_motion_current,
+    output wire [3:0]                   O_motion_reference,
+    output reg [11:0]                   O_motion_sample_x, O_motion_sample_y,
+    output reg                          O_motion_frame_end,
     input  wire                         I_de,
     input  wire                         I_user,
     input  wire                         I_last,
@@ -154,6 +166,52 @@ module digit_multi_bbox #(
     wire [3:0] gray_bank1_read_data;
     assign O_gray_read_data = I_gray_read_bank ? gray_bank1_read_data : gray_bank0_read_data;
 
+    // Read the capture bank one edge BEFORE its existing registered write.
+    // Its old contents are a historical frame, not necessarily the last frame:
+    // capture bank ownership can be held while analysis/CNN owns the peer.
+    // Never steal the read port from an active CNN crop, even on bad ownership.
+    reg [1:0] motion_history_valid;
+    reg motion_frame_enabled, motion_sample_bank;
+    wire capture_sample = (capture_state == ST_CAP) && I_de &&
+        (pixel_x >= ROI_X_MIN) && (pixel_x <= ROI_X_MAX) &&
+        (pixel_y >= ROI_Y_MIN) && (pixel_y <= ROI_Y_MAX) &&
+        (x_phase == 0) && (y_phase == 0);
+    wire motion_port_available = !I_crop_busy || (I_gray_read_bank != write_bank);
+    wire motion_read = capture_sample && I_motion_enable && motion_frame_enabled &&
+                       motion_port_available;
+    wire [15:0] gray0_read_addr = (motion_read && !write_bank) ?
+        {{(16-ADDR_W){1'b0}},capture_addr} : I_gray_read_addr;
+    wire [15:0] gray1_read_addr = (motion_read && write_bank) ?
+        {{(16-ADDR_W){1'b0}},capture_addr} : I_gray_read_addr;
+    assign O_motion_reference = motion_sample_bank ? gray_bank1_read_data : gray_bank0_read_data;
+
+    always @(posedge I_clk or negedge I_rst_n) begin
+        if(!I_rst_n) begin
+            motion_history_valid<=0;motion_frame_enabled<=0;motion_sample_bank<=0;
+            O_motion_sample_valid<=0;O_motion_reference_valid<=0;
+            O_motion_current<=0;O_motion_sample_x<=0;O_motion_sample_y<=0;O_motion_frame_end<=0;
+        end else begin
+            O_motion_sample_valid<=0;O_motion_reference_valid<=0;O_motion_frame_end<=0;
+            if(!I_motion_enable) begin
+                motion_history_valid<=0;motion_frame_enabled<=0;
+            end else begin
+                if(I_user && capture_state==ST_WAIT) motion_frame_enabled<=1;
+                if(capture_sample && motion_frame_enabled) begin
+                    O_motion_sample_valid<=1;
+                    O_motion_reference_valid<=motion_history_valid[write_bank] && motion_port_available;
+                    O_motion_current<=I_luma[7:4];motion_sample_bank<=write_bank;
+                    O_motion_sample_x<={{(12-COL_W){1'b0}},sample_col};
+                    O_motion_sample_y<={{(12-ROW_W){1'b0}},sample_row};
+                end
+                if((capture_state==ST_CAP) && I_de && I_last &&
+                   (pixel_y==IMG_HEIGHT-1) && motion_frame_enabled) begin
+                    motion_history_valid[write_bank]<=1;
+                    O_motion_frame_end<=1;
+                end
+            end
+        end
+    end
+
     bbox_bitmap_ram u_bbox_bitmap_bank0 (
         .dia   (bitmap_write_data),
         .addra (bitmap_write_addr),
@@ -179,7 +237,7 @@ module digit_multi_bbox #(
         .I_write_data (gray_write_data),
         .I_write_addr (gray_write_addr),
         .I_write_en   (gray_write_enable && !gray_write_bank),
-        .I_read_addr  (I_gray_read_addr),
+        .I_read_addr  (gray0_read_addr),
         .O_read_data  (gray_bank0_read_data)
     );
 
@@ -190,7 +248,7 @@ module digit_multi_bbox #(
         .I_write_data (gray_write_data),
         .I_write_addr (gray_write_addr),
         .I_write_en   (gray_write_enable && gray_write_bank),
-        .I_read_addr  (I_gray_read_addr),
+        .I_read_addr  (gray1_read_addr),
         .O_read_data  (gray_bank1_read_data)
     );
 
@@ -372,6 +430,42 @@ module digit_multi_bbox #(
 
                 default: capture_state <= ST_CLEAR;
             endcase
+        end
+    end
+
+    reg motion_wait_complete;
+    reg [269:0] process_motion_blocks, pending_motion_blocks;
+    reg process_motion_ready, process_motion_global;
+    reg pending_motion_ready, pending_motion_global;
+    // process_start and motion_frame_end originate at the same capture edge.
+    // The diff unit completes a few clocks later, before component analysis.
+    always @(posedge I_clk or negedge I_rst_n) begin
+        if(!I_rst_n) begin
+            motion_wait_complete<=0;process_motion_blocks<=0;pending_motion_blocks<=0;
+            process_motion_ready<=0;process_motion_global<=0;
+            pending_motion_ready<=0;pending_motion_global<=0;
+            O_bbox_motion_blocks<=0;O_bbox_motion_ready<=0;O_bbox_motion_global<=0;
+        end else if(!I_motion_enable) begin
+            motion_wait_complete<=0;process_motion_ready<=0;pending_motion_ready<=0;
+            O_bbox_motion_ready<=0;O_bbox_motion_global<=0;
+        end else begin
+            if(I_user) motion_wait_complete<=0;
+            if(process_start) begin
+                motion_wait_complete<=1;process_motion_ready<=0;process_motion_global<=0;
+            end
+            if(motion_wait_complete && I_completed_valid) begin
+                process_motion_blocks<=I_completed_blocks;
+                process_motion_ready<=I_completed_ready;process_motion_global<=I_completed_global;
+                motion_wait_complete<=0;
+            end
+            if(process_state==PR_PUBLISH) begin
+                pending_motion_blocks<=process_motion_blocks;
+                pending_motion_ready<=process_motion_ready;pending_motion_global<=process_motion_global;
+            end
+            if(I_user && result_seen!=result_toggle) begin
+                O_bbox_motion_blocks<=pending_motion_blocks;
+                O_bbox_motion_ready<=pending_motion_ready;O_bbox_motion_global<=pending_motion_global;
+            end
         end
     end
 

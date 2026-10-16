@@ -15,6 +15,11 @@ module design_top_wrapper (
     output wire [7:0]  O_SEL,
 
     output wire        O_screen_pwm,
+    output wire        O_lcd_scl,
+    output wire        O_lcd_sda,
+    output wire        O_lcd_rst,
+    output wire        O_lcd_dc,
+    output wire        O_lcd_cs,
     output wire        O_tmds_ch0_p,
     output wire        O_tmds_ch1_p,
     output wire        O_tmds_ch2_p,
@@ -87,6 +92,22 @@ wire [95:0] bbox_x_max;
 wire [95:0] bbox_y_min;
 wire [95:0] bbox_y_max;
 wire bbox_frame_valid;
+wire track_enable;
+reg track_view;
+wire [7:0] track_valid;
+wire [95:0] track_x_min, track_x_max, track_y_min, track_y_max;
+wire [127:0] track_center_x_bcd, track_center_y_bcd;
+wire [3:0] track_count;
+wire [7:0] track_arrow_valid;
+wire [23:0] track_arrow_direction;
+wire motion_sample_valid, motion_reference_valid, motion_frame_end;
+wire [3:0] motion_current, motion_reference;
+wire [11:0] motion_sample_x, motion_sample_y;
+wire [269:0] motion_blocks;
+wire [269:0] completed_motion_blocks, bbox_motion_blocks;
+wire completed_motion_valid, completed_motion_ready, completed_motion_global;
+wire bbox_motion_ready, bbox_motion_global;
+wire motion_reference_ready, motion_global_change;
 wire downsample_valid;
 wire [10:0] downsample_pixel;
 wire [9:0] downsample_pixel_addr;
@@ -125,6 +146,10 @@ wire [95:0] crop_y_max;
 wire [3:0] ddr_debug_status;
 wire ddr_init_calib_complete;
 wire [2:0] image_mode;
+wire [15:0] lcd_latency_ms;
+wire lcd_latency_valid;
+reg lcd_rst_meta;
+reg lcd_rst_n;
 wire debug_view;
 reg [2:0] image_mode_sync_1;
 reg [2:0] image_mode_sync_2;
@@ -145,6 +170,44 @@ wire hdmi_frame_start;
 assign system_rst_n = pll_lock;
 assign O_screen_pwm = 1'b1;
 assign debug_view = (image_mode_sync_2 == 3'b110);
+assign track_enable = (image_mode_sync_2 == 3'b111);
+
+// LCD logic runs from the board 50 MHz clock and releases reset synchronously.
+always @(posedge I_sys_clk or negedge system_rst_n) begin
+    if (!system_rst_n) begin
+        lcd_rst_meta <= 1'b0;
+        lcd_rst_n <= 1'b0;
+    end else begin
+        lcd_rst_meta <= 1'b1;
+        lcd_rst_n <= lcd_rst_meta;
+    end
+end
+
+lcd_status_bridge u_lcd_status_bridge (
+    .I_sys_clk        (I_sys_clk),
+    .I_hdmi_clk       (hdmi_pixel_clk),
+    .I_rst_n          (system_rst_n),
+    .I_latency_us     (measured_camera_latency_us),
+    .I_latency_valid  (measured_camera_latency_valid),
+    .O_latency_ms     (lcd_latency_ms),
+    .O_latency_valid  (lcd_latency_valid)
+);
+
+lcd_mode_display u_lcd_mode_display (
+    .I_clk            (I_sys_clk),
+    .I_rst_n          (lcd_rst_n),
+    .I_mode           (image_mode),
+    .I_latency_ms     (lcd_latency_ms),
+    .I_latency_valid  (lcd_latency_valid),
+    .O_scl            (O_lcd_scl),
+    .O_sda            (O_lcd_sda),
+    .O_rst            (O_lcd_rst),
+    .O_dc             (O_lcd_dc),
+    .O_cs             (O_lcd_cs),
+    .O_initialized    (),
+    .O_ready          (),
+    .O_displayed_mode ()
+);
 
 latency_monitor u_latency_monitor (
     .I_rst_n               (system_rst_n),
@@ -339,6 +402,16 @@ digit_multi_bbox #(
     .I_gray_read_addr     (gray_frame_read_addr),
     .I_gray_read_bank     (gray_frame_read_bank),
     .O_gray_read_data     (gray_frame_read_data),
+    .I_motion_enable (track_view),
+    .I_completed_blocks(completed_motion_blocks), .I_completed_valid(completed_motion_valid),
+    .I_completed_ready(completed_motion_ready), .I_completed_global(completed_motion_global),
+    .O_bbox_motion_blocks(bbox_motion_blocks), .O_bbox_motion_ready(bbox_motion_ready),
+    .O_bbox_motion_global(bbox_motion_global),
+    .O_motion_sample_valid (motion_sample_valid),
+    .O_motion_reference_valid (motion_reference_valid),
+    .O_motion_current (motion_current), .O_motion_reference (motion_reference),
+    .O_motion_sample_x (motion_sample_x), .O_motion_sample_y (motion_sample_y),
+    .O_motion_frame_end (motion_frame_end),
     .I_de                 (processed_video_de),
     .I_user               (processed_video_user),
     .I_last               (processed_video_last),
@@ -355,6 +428,52 @@ digit_multi_bbox #(
     .O_crop_x_max         (crop_x_max),
     .O_crop_y_min         (crop_y_min),
     .O_crop_y_max         (crop_y_max)
+);
+
+// Detector updates are independent of CNN crop/inference scheduling.
+// Frame-latch the display selector so overlays never switch mid-scan.
+always @(posedge hdmi_pixel_clk or negedge system_rst_n) begin
+    if(!system_rst_n) track_view <= 1'b0;
+    else if(processed_video_user) track_view <= track_enable;
+end
+
+digit_motion_tracker #(
+    .MATCH_DISTANCE (96),
+    .SIZE_TOLERANCE (64),
+    .MAX_MISSED (5),
+    .HISTORY_INTERVAL (4), .START_DISTANCE (8),
+    .STOP_DISTANCE (3), .STOP_CONFIRM (2), .REQUIRE_FRAME_DIFF(1), .ACTIVITY_HOLD(4),
+    .USE_ERAM_IP (1)
+) u_digit_motion_tracker (
+    .I_clk (hdmi_pixel_clk), .I_rst_n (system_rst_n),
+    .I_enable (track_view), .I_frame_start (processed_video_user),
+    .I_vblank (processed_video_vsync),
+    .I_bbox_update (bbox_frame_valid), .I_bbox_valid (bbox_valid),
+    .I_motion_blocks(bbox_motion_blocks), .I_motion_ready(bbox_motion_ready), .I_motion_global(bbox_motion_global),
+    .I_x_min (bbox_x_min), .I_x_max (bbox_x_max),
+    .I_y_min (bbox_y_min), .I_y_max (bbox_y_max),
+    .O_valid (track_valid),
+    .O_x_min (track_x_min), .O_x_max (track_x_max),
+    .O_y_min (track_y_min), .O_y_max (track_y_max),
+    .O_center_x (), .O_center_y (),
+    .O_center_x_bcd (track_center_x_bcd), .O_center_y_bcd (track_center_y_bcd),
+    .O_arrow_valid (track_arrow_valid), .O_arrow_direction (track_arrow_direction),
+    .O_count (track_count), .O_update ()
+);
+
+frame_diff_motion #(
+    .SAMPLE_COLS (275), .SAMPLE_ROWS (229),
+    .BLOCK_SHIFT (4), .DIFF_THRESHOLD (3), .MIN_CHANGED (16)
+) u_frame_diff_motion (
+    .I_clk (hdmi_pixel_clk), .I_rst_n (system_rst_n), .I_enable (track_view),
+    .I_frame_start (processed_video_user), .I_frame_end (motion_frame_end),
+    .I_sample_valid (motion_sample_valid), .I_reference_valid (motion_reference_valid),
+    .I_current (motion_current), .I_reference (motion_reference),
+    .I_sample_x (motion_sample_x), .I_sample_y (motion_sample_y),
+    .O_blocks (motion_blocks), .O_reference_ready (motion_reference_ready),
+    .O_global_change (motion_global_change),
+    .O_completed_blocks(completed_motion_blocks), .O_completed_valid(completed_motion_valid),
+    .O_completed_ready(completed_motion_ready), .O_completed_global(completed_motion_global)
 );
 
 bbox_gray_downsampler #(
@@ -454,13 +573,20 @@ display_top u_display_top (
     .I_video_user   (processed_video_user),
     .I_video_last   (processed_video_last),
     .I_debug_status (ddr_debug_status),
-    .I_bbox_valid   (cnn_bbox_valid),
-    .I_bbox_x_min   (cnn_bbox_x_min),
-    .I_bbox_x_max   (cnn_bbox_x_max),
-    .I_bbox_y_min   (cnn_bbox_y_min),
-    .I_bbox_y_max   (cnn_bbox_y_max),
-    .I_bbox_digit_valid (cnn_digit_valid),
-    .I_bbox_digits      (cnn_digits),
+    .I_bbox_valid   (track_view ? track_valid : cnn_bbox_valid),
+    .I_bbox_x_min   (track_view ? track_x_min : cnn_bbox_x_min),
+    .I_bbox_x_max   (track_view ? track_x_max : cnn_bbox_x_max),
+    .I_bbox_y_min   (track_view ? track_y_min : cnn_bbox_y_min),
+    .I_bbox_y_max   (track_view ? track_y_max : cnn_bbox_y_max),
+    .I_bbox_digit_valid (track_view ? track_valid : cnn_digit_valid),
+    // In TRACK mode the existing large numeric labels are IDs, not CNN digits.
+    .I_bbox_digits      (track_view ? 32'h87654321 : cnn_digits),
+    .I_track_view (track_view), .I_track_count (track_count),
+    .I_track_arrow_valid (track_arrow_valid), .I_track_arrow_direction (track_arrow_direction),
+    .I_track_center_x_bcd (track_center_x_bcd),
+    .I_track_center_y_bcd (track_center_y_bcd),
+    .I_motion_blocks (motion_blocks), .I_motion_ready (motion_reference_ready),
+    .I_motion_global (motion_global_change),
     .I_debug_view   (debug_view),
     .I_debug_box    (debug_box_sync_2),
     .I_downsample_valid      (downsample_valid && downsample_ready),

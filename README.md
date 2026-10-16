@@ -44,6 +44,22 @@ img_processing
 HDMI 720p 显示
 ```
 
+## 移动数字牌检测与跟踪
+
+2026-10-16 上板验收版本：TRACK（111）模式支持多目标 ID、中心坐标、硬件间隔帧差提示，以及帧差活动与坐标位移联合确认。静止目标显示绿色框，确认移动后显示蓝色框和橙色八方向箭头。跟踪历史复用 16 bit×256 ERAM，当前生成 IP 已随工程保存，无需重新生成。
+
+HDMI 叠加路径已对文字、边框判断和 Logo 地址运算进行流水调整，用户反馈画面效果符合预期。工程仍须针对目标工具重新综合、布线并检查时序；仓库中已有实现产物可能来自历史版本，不能代替当前源码构建。
+
+使用 `td_project/camera_to_dsi_display.al` 打开工程。说明见 [第五阶段方案](doc/digit_motion_stage5.md)、[ERAM 接入](doc/digit_tracker_eram_ip.md)和[画面割裂排查](doc/video_tearing_stage5.md)。回归脚本为 `sim/run_digit_tracking.ps1`，现有 18 次行为仿真全部通过，包含真实 ERAM、八目标联合判断及逐像素显示对齐。
+
+## LCD 状态显示
+
+SPI LCD 输出由 `design_top_wrapper` 的 `O_lcd_scl/O_lcd_sda/O_lcd_rst/O_lcd_dc/O_lcd_cs` 提供，约束为 P9/R7/R6/T5/U7，均使用 LVCMOS33。LCD 使用 `I_sys_clk` 的 50 MHz 时钟，复位来自锁相环锁定后的 `system_rst_n`，并在 LCD 本地同步释放。初始化和填充序列沿用 `lcd_hw_test.v` 的控制器行为。
+
+LCD 模式字符串覆盖：`ORIGINAL`、`GRAY`、`BINARY`、`SOBEL`、`AUTO EXP`、`EQUALIZE`、`PREVIEW`。模式值为控制模块的 3 bit 编码。`lcd_status_bridge.v` 将 HDMI 域的 `measured_camera_latency_us` 通过稳定数据加 toggle 快照送入系统时钟域，再以串行 32 步除法转换为毫秒。
+
+LCD 上的 CAM 延迟是最新摄像头帧起点与后续 HDMI monitor 帧起点的时间差，属于 latest-frame phase 的近似观测值，不是同一匹配帧的端到端结束延迟，也不代表精确的逐帧传输延迟。
+
 目标视频格式：
 
 - 分辨率：`1280 × 720`

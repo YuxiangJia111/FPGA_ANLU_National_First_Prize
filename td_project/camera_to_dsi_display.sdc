@@ -36,3 +36,14 @@ set_min_delay 0.000 \
 set_min_delay 0.000 \
     -from [get_cells {u_bbox_cnn_adapter/result_mailbox_data_reg*}] \
     -to [get_cells {u_bbox_cnn_adapter/batch_digits_reg* u_bbox_cnn_adapter/batch_digit_valid_reg*}]
+
+# LCD status mailbox: the HDMI payload and valid flag remain held until the
+# request toggle is acknowledged back from the system clock domain.
+set_false_path -to [get_cells {u_lcd_status_bridge/req_sync_1_reg* u_lcd_status_bridge/payload_sync_1_reg* u_lcd_status_bridge/valid_sync_1_reg*}]
+set_false_path -to [get_cells {u_lcd_status_bridge/ack_sync_1_reg*}]
+set_max_delay 20.000 \
+    -from [get_cells {u_lcd_status_bridge/status_payload_reg* u_lcd_status_bridge/status_valid_reg*}] \
+    -to [get_cells {u_lcd_status_bridge/payload_sync_2_reg* u_lcd_status_bridge/valid_sync_2_reg*}]
+set_min_delay 0.000 \
+    -from [get_cells {u_lcd_status_bridge/status_payload_reg* u_lcd_status_bridge/status_valid_reg*}] \
+    -to [get_cells {u_lcd_status_bridge/payload_sync_2_reg* u_lcd_status_bridge/valid_sync_2_reg*}]

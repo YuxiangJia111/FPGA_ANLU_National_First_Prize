@@ -24,6 +24,13 @@ module hdmi_mixer #(
     input wire[95:0]  I_bbox_y_max,
     input wire[7:0]   I_bbox_digit_valid,
     input wire[31:0]  I_bbox_digits,
+    input wire        I_track_view,
+    input wire [3:0]  I_track_count,
+    input wire [7:0] I_track_arrow_valid,
+    input wire [23:0] I_track_arrow_direction,
+    input wire [127:0] I_track_center_x_bcd, I_track_center_y_bcd,
+    input wire [269:0] I_motion_blocks,
+    input wire I_motion_ready, I_motion_global,
     input wire        I_debug_view,
     input wire [2:0]  I_debug_box,
     input wire        I_downsample_valid,
@@ -62,6 +69,60 @@ module hdmi_mixer #(
     reg        S_osd_hit;
     reg [23:0] S_osd_color;
     reg        S_bbox_hit;
+    reg        S_bbox_moving;
+    reg border_hit_next, border_moving_next;
+    integer border_i;
+    // Compute border and moving selection one pixel stage earlier. The
+    // registers align with x/y_2d and remove eight parallel box comparisons
+    // from the final RGB selection path, without changing video latency.
+    always @(*) begin
+        border_hit_next=0;border_moving_next=0;
+        if(S_video_de_1d) begin
+            for(border_i = 0; border_i < 8; border_i = border_i + 1) begin
+                if(I_bbox_valid[border_i] &&
+                   (S_x_1d >= I_bbox_x_min[border_i*12 +: 12]) &&
+                   (S_x_1d <= I_bbox_x_max[border_i*12 +: 12]) &&
+                   (S_y_1d >= I_bbox_y_min[border_i*12 +: 12]) &&
+                   (S_y_1d <= I_bbox_y_max[border_i*12 +: 12]) &&
+                   ((S_x_1d <= I_bbox_x_min[border_i*12 +: 12] + 12'd1) ||
+                    (S_x_1d >= I_bbox_x_max[border_i*12 +: 12] - 12'd1) ||
+                    (S_y_1d <= I_bbox_y_min[border_i*12 +: 12] + 12'd1) ||
+                    (S_y_1d >= I_bbox_y_max[border_i*12 +: 12] - 12'd1))) begin
+                    border_hit_next = 1'b1;
+                    if(I_track_arrow_valid[border_i]) border_moving_next = 1'b1;
+                end
+            end
+        end
+    end
+    always @(posedge I_clk or negedge I_rst_n) begin
+        if(!I_rst_n)begin S_bbox_hit<=0;S_bbox_moving<=0;end
+        else begin S_bbox_hit<=border_hit_next;S_bbox_moving<=border_moving_next;end
+    end
+    wire S_track_panel_hit;
+    wire [23:0] S_track_panel_color;
+    wire S_motion_hit;
+    wire S_arrow_hit;
+    digit_motion_arrow_osd #(.IMG_WIDTH(IMG_WIDTH),.IMG_HEIGHT(IMG_HEIGHT)) u_digit_motion_arrow_osd (
+        .I_clk(I_clk), .I_rst_n(I_rst_n), .I_enable(I_track_view),
+        .I_vblank(I_video_vsync), .I_de(I_video_de), .I_x(S_x), .I_y(S_y),
+        .I_box_valid(I_bbox_valid), .I_arrow_valid(I_track_arrow_valid), .I_direction(I_track_arrow_direction),
+        .I_x_min(I_bbox_x_min), .I_x_max(I_bbox_x_max), .I_y_min(I_bbox_y_min), .O_hit(S_arrow_hit)
+    );
+    motion_block_osd u_motion_block_osd (
+        .I_clk(I_clk), .I_rst_n(I_rst_n),
+        .I_enable(I_track_view && I_motion_ready && !I_motion_global),
+        .I_de(I_video_de), .I_x(S_x), .I_y(S_y),
+        .I_blocks(I_motion_blocks), .O_hit(S_motion_hit)
+    );
+    digit_track_osd u_digit_track_osd (
+        .I_clk(I_clk), .I_rst_n(I_rst_n), .I_enable(I_track_view),
+        .I_de(S_video_de_1d), .I_x(S_x_1d), .I_y(S_y_1d),
+        .I_valid(I_bbox_valid), .I_count(I_track_count),
+        .I_center_x_bcd(I_track_center_x_bcd),
+        .I_center_y_bcd(I_track_center_y_bcd),
+        .I_motion_ready(I_motion_ready), .I_motion_global(I_motion_global),
+        .O_hit(S_track_panel_hit), .O_color(S_track_panel_color)
+    );
     reg [11:0] S_logo_x;
     reg [11:0] S_logo_y;
     reg [3:0]  S_char_idx;
@@ -140,7 +201,6 @@ module hdmi_mixer #(
     wire       S_bbox_label_on;
     genvar label_box;
     integer label_i;
-    integer bbox_i;
 
     localparam LOGO_X = 12'd0;
     localparam LOGO_Y = 12'd0;
@@ -692,11 +752,19 @@ module hdmi_mixer #(
     assign S_logo_rom_active =
         (S_x_1d >= 12'd7) && (S_x_1d <= 12'd152) &&
         (S_y_1d >= 12'd34) && (S_y_1d <= 12'd127);
+    // The cropped logo has 146 pixels per row. Precompute the row term
+    // from raw coordinates, then add the column at stage 1 before the ROM.
+    // Keep the original ROM/output stages and all video sync delays.
+    wire [6:0] logo_row = S_y[6:0]-7'd34;
+    wire [7:0] logo_col_1d = S_x_1d[7:0]-8'd7;
+    reg [13:0] logo_row_base_1d;
+    always @(posedge I_clk or negedge I_rst_n) begin
+        if(!I_rst_n)logo_row_base_1d<=0;
+        else logo_row_base_1d<=({7'd0,logo_row}<<7)+
+                              ({7'd0,logo_row}<<4)+({7'd0,logo_row}<<1);
+    end
     assign S_logo_rom_addr = S_logo_rom_active ?
-        (((S_y_1d - 12'd34) << 7) +
-         ((S_y_1d - 12'd34) << 4) +
-         ((S_y_1d - 12'd34) << 1) +
-         (S_x_1d - 12'd7)) : 14'd0;
+        logo_row_base_1d+{6'd0,logo_col_1d} : 14'd0;
 
     generate
         if(ENABLE_LOGO != 0) begin : g_logo_enabled
@@ -915,11 +983,15 @@ module hdmi_mixer #(
         end
     end
 
+    // The text renderer now ends in a register at coordinate stage 2.
+    // Logo, box, label and preview keep their original priority and latency.
+    reg counter_hit_next, counter_hit_q;
+    always @(posedge I_clk or negedge I_rst_n) begin
+        if(!I_rst_n)counter_hit_q<=0;
+        else counter_hit_q<=counter_hit_next;
+    end
     always @(*) begin
-        S_osd_hit   = 1'b0;
-        S_osd_color = 24'd0;
-        S_logo_x = 12'd0;
-        S_logo_y = 12'd0;
+        counter_hit_next   = 1'b0;
         S_char_idx = 4'd0;
         S_char_row = 3'd0;
         S_char_col = 3'd0;
@@ -963,24 +1035,13 @@ module hdmi_mixer #(
         S_pf_on = 1'b0;
         S_pf_scale_x = 10'd0;
         S_pf_scale_y = 10'd0;
-        S_bbox_hit = 1'b0;
 
-        if(S_video_de_2d) begin
-            if((S_x_2d >= LOGO_X) && (S_x_2d < (LOGO_X + LOGO_W)) &&
-               (S_y_2d >= LOGO_Y) && (S_y_2d < (LOGO_Y + LOGO_H))) begin
-                S_logo_x = S_x_2d - LOGO_X;
-                S_logo_y = S_y_2d - LOGO_Y;
-                if(S_logo_pixel[24]) begin
-                    S_osd_hit   = 1'b1;
-                    S_osd_color = S_logo_pixel[23:0];
-                end
-            end
-
-            if((!S_osd_hit) &&
-               (S_x_2d >= DYN_OSD_X) && (S_x_2d < (DYN_OSD_X + DYN_OSD_W)) &&
-               (S_y_2d >= DYN_OSD_Y) && (S_y_2d < (DYN_OSD_Y + DYN_OSD_H))) begin
-                S_dyn_x = S_x_2d - DYN_OSD_X;
-                S_dyn_y = S_y_2d - DYN_OSD_Y;
+        if(S_video_de_1d) begin
+            if((!counter_hit_next) &&
+               (S_x_1d >= DYN_OSD_X) && (S_x_1d < (DYN_OSD_X + DYN_OSD_W)) &&
+               (S_y_1d >= DYN_OSD_Y) && (S_y_1d < (DYN_OSD_Y + DYN_OSD_H))) begin
+                S_dyn_x = S_x_1d - DYN_OSD_X;
+                S_dyn_y = S_y_1d - DYN_OSD_Y;
 
                 // Unified prefix render using one character library.
                 // an:[0..23], lu:[24..47], C:[52..67], N:[68..83], T:[84..99], :[100..107]
@@ -1162,28 +1223,31 @@ module hdmi_mixer #(
                 end
 
                 if(S_dyn_on) begin
-                    S_osd_hit = 1'b1;
-                    S_osd_color = COLOR_DYN_TEXT;
+                    counter_hit_next = 1'b1;
+                end
+            end
+
+        end
+    end
+
+    always @(*) begin
+        S_osd_hit=counter_hit_q;S_osd_color=COLOR_DYN_TEXT;
+        S_logo_x=0;S_logo_y=0;
+        if(S_video_de_2d) begin
+            if((S_x_2d >= LOGO_X) && (S_x_2d < (LOGO_X + LOGO_W)) &&
+               (S_y_2d >= LOGO_Y) && (S_y_2d < (LOGO_Y + LOGO_H))) begin
+                S_logo_x = S_x_2d - LOGO_X;
+                S_logo_y = S_y_2d - LOGO_Y;
+                if(S_logo_pixel[24]) begin
+                    S_osd_hit   = 1'b1;
+                    S_osd_color = S_logo_pixel[23:0];
                 end
             end
 
             // Bounding box borders override the logo and counter.
-            for(bbox_i = 0; bbox_i < 8; bbox_i = bbox_i + 1) begin
-                if(I_bbox_valid[bbox_i] &&
-                   (S_x_2d >= I_bbox_x_min[bbox_i*12 +: 12]) &&
-                   (S_x_2d <= I_bbox_x_max[bbox_i*12 +: 12]) &&
-                   (S_y_2d >= I_bbox_y_min[bbox_i*12 +: 12]) &&
-                   (S_y_2d <= I_bbox_y_max[bbox_i*12 +: 12]) &&
-                   ((S_x_2d <= I_bbox_x_min[bbox_i*12 +: 12] + 12'd1) ||
-                    (S_x_2d >= I_bbox_x_max[bbox_i*12 +: 12] - 12'd1) ||
-                    (S_y_2d <= I_bbox_y_min[bbox_i*12 +: 12] + 12'd1) ||
-                    (S_y_2d >= I_bbox_y_max[bbox_i*12 +: 12] - 12'd1))) begin
-                    S_bbox_hit = 1'b1;
-                end
-            end
             if(S_bbox_hit) begin
                 S_osd_hit = 1'b1;
-                S_osd_color = 24'hff0000;
+                S_osd_color = I_track_view ? (S_bbox_moving ? 24'h0000ff : 24'h00ff00) : 24'hff0000;
             end
 
             if(S_bbox_label_on) begin
@@ -1238,6 +1302,15 @@ module hdmi_mixer #(
 
             if(S_hud_hit) begin
                 O_hdmi_data <= S_hud_color;
+            end
+            else if(S_track_panel_hit) begin
+                O_hdmi_data <= S_track_panel_color;
+            end
+            else if(S_arrow_hit && !S_bbox_hit && !S_bbox_label_on) begin
+                O_hdmi_data <= 24'hff8000;
+            end
+            else if(S_motion_hit && !S_bbox_hit && !S_bbox_label_on) begin
+                O_hdmi_data <= 24'hffff00;
             end
             else if(DEBUG_MODE == 1) begin
                 if(S_video_de_2d) begin

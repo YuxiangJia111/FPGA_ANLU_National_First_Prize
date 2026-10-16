@@ -563,6 +563,70 @@
                     <Attr Name="CompileOrder" Val="87"/>
                 </FileInfo>
             </File>
+            <File Path="../user_source/hdl_source/lcd_mode_display.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="88"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/lcd_status_bridge.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="89"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/lcd_hw_test.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="90"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/digit_motion_tracker.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="91"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/digit_track_osd.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="92"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/frame_diff_motion.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="93"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/motion_block_osd.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="94"/>
+                </FileInfo>
+            </File>
+            <File Path="../user_source/hdl_source/digit_motion_arrow_osd.v">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="96"/>
+                </FileInfo>
+            </File>
         </Verilog>
         <System_Verilog>
             <File Path="../user_source/hdl_source/mipi_dphy_rx/mipi_dphy_rx_ph1p_mipiio_wrapper.sv">
@@ -628,7 +692,7 @@
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="constraint_1"/>
-                    <Attr Name="CompileOrder" Val="1"/>
+                    <Attr Name="CompileOrder" Val="2"/>
                 </FileInfo>
             </File>
         </ADC_FILE>
@@ -638,7 +702,7 @@
                     <Attr Name="UsedInSyn" Val="true"/>
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="constraint_1"/>
-                    <Attr Name="CompileOrder" Val="2"/>
+                    <Attr Name="CompileOrder" Val="1"/>
                 </FileInfo>
             </File>
         </SDC_FILE>
@@ -739,6 +803,14 @@
                     <Attr Name="UsedInP&R" Val="true"/>
                     <Attr Name="BelongTo" Val="design_1"/>
                     <Attr Name="CompileOrder" Val="85"/>
+                </FileInfo>
+            </File>
+            <File Path="al_ip/digit_tracker_state_ram_adapter/digit_tracker_state_ram_adapter.xml">
+                <FileInfo>
+                    <Attr Name="UsedInSyn" Val="true"/>
+                    <Attr Name="UsedInP&R" Val="true"/>
+                    <Attr Name="BelongTo" Val="design_1"/>
+                    <Attr Name="CompileOrder" Val="95"/>
                 </FileInfo>
             </File>
         </IP_FILE>

@@ -19,6 +19,7 @@ module control_top (
     localparam [2:0] MODE_AUTO_EXP = 3'b100;
     localparam [2:0] MODE_EQUALIZE = 3'b101;
     localparam [2:0] MODE_DOWNSAMPLE = 3'b110;
+    localparam [2:0] MODE_TRACK    = 3'b111;
 
     wire [3:0] key_event;
     reg  [3:0] switch_sync_1;
@@ -94,12 +95,14 @@ module control_top (
                 MODE_SOBEL: selected_mode <= MODE_AUTO_EXP;
                 MODE_AUTO_EXP: selected_mode <= MODE_EQUALIZE;
                 MODE_EQUALIZE: selected_mode <= MODE_DOWNSAMPLE;
-                MODE_DOWNSAMPLE: selected_mode <= MODE_GRAY;
+                MODE_DOWNSAMPLE: selected_mode <= MODE_TRACK;
+                MODE_TRACK: selected_mode <= MODE_GRAY;
                 default:     selected_mode <= MODE_GRAY;
             endcase
             end else if(key_event[2]) begin
             case(selected_mode)
-                MODE_GRAY:   selected_mode <= MODE_DOWNSAMPLE;
+                MODE_GRAY:   selected_mode <= MODE_TRACK;
+                MODE_TRACK: selected_mode <= MODE_DOWNSAMPLE;
                 MODE_DOWNSAMPLE: selected_mode <= MODE_EQUALIZE;
                 MODE_EQUALIZE: selected_mode <= MODE_AUTO_EXP;
                 MODE_AUTO_EXP: selected_mode <= MODE_SOBEL;
